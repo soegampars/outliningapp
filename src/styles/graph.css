@@ -1,0 +1,130 @@
+/* React Flow + node styling for the skeleton canvas (concept §4.1, §5). */
+
+.react-flow__attribution {
+  display: none;
+}
+
+/* --- Argument node --- */
+.spine-node {
+  min-width: 150px;
+  max-width: 260px;
+  background: var(--node-surface);
+  border: 1px solid var(--edge-default);
+  /* Left accent carries strength colour later (Step 3); neutral for now. */
+  border-left: 3px solid var(--edge-default);
+  border-radius: var(--radius);
+  padding: 8px 10px 10px;
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.spine-node.selected {
+  border-color: var(--text-secondary);
+  box-shadow: 0 0 0 1px var(--text-secondary);
+}
+
+.spine-node__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.spine-node__badge {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--edge-default);
+  border-radius: 4px;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  font-weight: 600;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+.spine-node__badge:hover {
+  color: var(--text-primary);
+}
+
+.spine-node__attention {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--strength-unfinished);
+  margin-left: auto;
+}
+
+.spine-node__claim {
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: text;
+  min-height: 18px;
+}
+.spine-node__claim--empty {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.spine-node__editor {
+  width: 100%;
+  background: var(--canvas-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--support-citation);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+  resize: none;
+  padding: 4px 6px;
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: var(--text-secondary);
+  border: 1px solid var(--canvas-bg);
+}
+.react-flow__handle:hover {
+  background: var(--support-citation);
+}
+
+/* --- Toolbar --- */
+.spine-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 14px;
+  background: var(--panel-surface);
+  border-bottom: 1px solid var(--edge-default);
+  user-select: none;
+}
+.spine-toolbar__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.spine-toolbar__hint {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.spine-toolbar__spacer {
+  flex: 1;
+}
+.spine-toolbar__count {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.spine-btn {
+  background: var(--node-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--edge-default);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.spine-btn:hover {
+  border-color: var(--text-secondary);
+}

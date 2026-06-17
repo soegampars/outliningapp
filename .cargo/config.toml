@@ -1,0 +1,7 @@
+# Workaround for this machine's TLS stack failing certificate *revocation*
+# checks (schannel CRYPT_E_NO_REVOCATION_CHECK) when cargo fetches from
+# crates.io. The certificate chain is still validated in full; only the
+# online revocation lookup (which this network/proxy blocks) is skipped.
+# Safe to delete if the network situation changes.
+[http]
+check-revoke = false
