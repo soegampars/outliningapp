@@ -15,6 +15,7 @@ import {
 import { useSpine } from "../state/store";
 import { computeEffectiveStrength } from "../model/strength";
 import { gapTypeIds } from "../model/gaps";
+import { classifySpine } from "../model/spine";
 import { blockOutput } from "../model/blocks";
 import { ArgNodeView } from "./ArgNodeView";
 
@@ -26,6 +27,7 @@ export function GraphCanvas() {
   const supports = useSpine((s) => s.supports);
   const allTypes = useSpine((s) => s.nodeTypes);
   const currentParentId = useSpine((s) => s.currentParentId);
+  const linearOrder = useSpine((s) => s.linearOrder);
   const selectedNodeIds = useSpine((s) => s.selectedNodeIds);
   const selectedEdgeIds = useSpine((s) => s.selectedEdgeIds);
   const focusedSourceId = useSpine((s) => s.focusedSourceId);
@@ -57,6 +59,29 @@ export function GraphCanvas() {
     [nodes, edges, gapIds],
   );
 
+  // Spine vs lateral support (v2-E), derived from the curated order + edges.
+  const { spine, lateral } = useMemo(() => {
+    const orderIndex = new Map<number, number>();
+    linearOrder.forEach((id, i) => orderIndex.set(id, i));
+    let terminusId: number | null = null;
+    if (currentParentId != null) {
+      terminusId = blockOutput(currentParentId, nodes, edges)?.id ?? null;
+    } else {
+      for (let i = linearOrder.length - 1; i >= 0; i--) {
+        if (visibleNodeIds.has(linearOrder[i])) {
+          terminusId = linearOrder[i];
+          break;
+        }
+      }
+    }
+    if (terminusId == null) {
+      const hasOut = new Set(visibleEdges.map((e) => e.from_id));
+      const sinks = visibleNodes.filter((n) => !hasOut.has(n.id));
+      terminusId = (sinks[sinks.length - 1] ?? visibleNodes[visibleNodes.length - 1])?.id ?? null;
+    }
+    return classifySpine(visibleNodes, visibleEdges, terminusId, orderIndex);
+  }, [visibleNodes, visibleEdges, visibleNodeIds, linearOrder, currentParentId, nodes, edges]);
+
   const footprint = useMemo(() => {
     const set = new Set<number>();
     if (focusedSourceId != null) {
@@ -85,23 +110,29 @@ export function GraphCanvas() {
             attention: n.attention,
             effective: effectiveById[n.id] ?? n.strength,
             isBlock,
+            spineRole: spine.has(n.id) ? "spine" : lateral.has(n.id) ? "lateral" : null,
           },
         };
       }),
-    [visibleNodes, nodes, edges, selectedNodeSet, effectiveById, footprint],
+    [visibleNodes, nodes, edges, selectedNodeSet, effectiveById, footprint, spine, lateral],
   );
 
   const rfEdges = useMemo<RFEdge[]>(
     () =>
-      visibleEdges.map((e) => ({
-        id: String(e.id),
-        source: String(e.from_id),
-        target: String(e.to_id),
-        selected: selectedEdgeSet.has(e.id),
-        markerEnd: { type: MarkerType.ArrowClosed },
-        style: e.kind === "disjunctive" ? { strokeDasharray: "7 5" } : undefined,
-      })),
-    [visibleEdges, selectedEdgeSet],
+      visibleEdges.map((e) => {
+        const onSpine = spine.has(e.from_id) && spine.has(e.to_id);
+        const isLateral = lateral.has(e.from_id) && spine.has(e.to_id);
+        return {
+          id: String(e.id),
+          source: String(e.from_id),
+          target: String(e.to_id),
+          selected: selectedEdgeSet.has(e.id),
+          className: onSpine ? "spine-edge" : isLateral ? "lateral-edge" : undefined,
+          markerEnd: { type: MarkerType.ArrowClosed },
+          style: e.kind === "disjunctive" ? { strokeDasharray: "7 5" } : undefined,
+        };
+      }),
+    [visibleEdges, selectedEdgeSet, spine, lateral],
   );
 
   const onNodesChange = useCallback(

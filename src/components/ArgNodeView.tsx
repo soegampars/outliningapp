@@ -12,6 +12,7 @@ export interface ArgNodeData {
   attention: number;
   effective: Strength;
   isBlock: boolean;
+  spineRole?: "spine" | "lateral" | null;
   [key: string]: unknown;
 }
 
@@ -52,7 +53,9 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
     `spine-node strength-${d.effective}` +
     (selected ? " selected" : "") +
     (d.isBlock ? " spine-node--block" : "") +
-    (isGap ? " spine-node--gap" : "");
+    (isGap ? " spine-node--gap" : "") +
+    (d.spineRole === "spine" ? " spine-node--onspine" : "") +
+    (d.spineRole === "lateral" ? " spine-node--lateral" : "");
 
   return (
     <div className={cls}>
