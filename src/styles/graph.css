@@ -517,6 +517,37 @@
   opacity: 0.6;
 }
 
+/* Argument-position roles (v2-F). A small tag names a node's place in the thread;
+   the terminus and a block's output get a distinct frame so the shape is legible
+   at a glance — the terminus can be any type, incl. an open question. */
+.spine-node__role {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+/* Terminus — where the argument lands. */
+.spine-node--terminus {
+  border-bottom: 3px solid var(--text-primary);
+}
+.spine-node--terminus .spine-node__role {
+  color: var(--text-primary);
+}
+/* Block output — what this block represents one level up. */
+.spine-node--output {
+  border-top: 3px solid var(--support-citation);
+}
+.spine-node--output .spine-node__role {
+  color: var(--support-citation);
+}
+/* Section / intermediate conclusion — distinct from the terminus. */
+.spine-node--section .spine-node__role {
+  color: var(--strength-unfinished);
+}
+
 /* Breadcrumb (inside a block) */
 .breadcrumb {
   display: flex;

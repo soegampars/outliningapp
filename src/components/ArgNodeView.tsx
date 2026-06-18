@@ -13,6 +13,7 @@ export interface ArgNodeData {
   effective: Strength;
   isBlock: boolean;
   spineRole?: "spine" | "lateral" | null;
+  positionRole?: "terminus" | "output" | "section" | null;
   [key: string]: unknown;
 }
 
@@ -49,13 +50,22 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
   const cancel = () => setEditing(null);
 
   const isGap = isGapTypeName(nodeTypes.find((t) => t.id === d.typeId)?.name);
+  const roleLabel =
+    d.positionRole === "terminus"
+      ? "lands here"
+      : d.positionRole === "output"
+        ? "block output"
+        : d.positionRole === "section"
+          ? "section"
+          : null;
   const cls =
     `spine-node strength-${d.effective}` +
     (selected ? " selected" : "") +
     (d.isBlock ? " spine-node--block" : "") +
     (isGap ? " spine-node--gap" : "") +
     (d.spineRole === "spine" ? " spine-node--onspine" : "") +
-    (d.spineRole === "lateral" ? " spine-node--lateral" : "");
+    (d.spineRole === "lateral" ? " spine-node--lateral" : "") +
+    (d.positionRole ? " spine-node--" + d.positionRole : "");
 
   return (
     <div className={cls}>
@@ -80,6 +90,7 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
           </span>
         ) : null}
         {d.attention ? <span className="spine-node__attention" title="Needs attention" /> : null}
+        {roleLabel ? <span className="spine-node__role">{roleLabel}</span> : null}
       </div>
 
       {editing && !d.isBlock ? (

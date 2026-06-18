@@ -60,7 +60,7 @@ export function GraphCanvas() {
   );
 
   // Spine vs lateral support (v2-E), derived from the curated order + edges.
-  const { spine, lateral } = useMemo(() => {
+  const { spine, lateral, terminusId } = useMemo(() => {
     const orderIndex = new Map<number, number>();
     linearOrder.forEach((id, i) => orderIndex.set(id, i));
     let terminusId: number | null = null;
@@ -79,8 +79,23 @@ export function GraphCanvas() {
       const sinks = visibleNodes.filter((n) => !hasOut.has(n.id));
       terminusId = (sinks[sinks.length - 1] ?? visibleNodes[visibleNodes.length - 1])?.id ?? null;
     }
-    return classifySpine(visibleNodes, visibleEdges, terminusId, orderIndex);
+    const cls = classifySpine(visibleNodes, visibleEdges, terminusId, orderIndex);
+    return { spine: cls.spine, lateral: cls.lateral, terminusId };
   }, [visibleNodes, visibleEdges, visibleNodeIds, linearOrder, currentParentId, nodes, edges]);
+
+  // Argument-position roles (v2-F). Inside a block the output node is special; at
+  // the top the spine's end is the terminus (any type — never assumed "answer").
+  const outputId = useMemo(
+    () => (currentParentId != null ? (blockOutput(currentParentId, nodes, edges)?.id ?? null) : null),
+    [currentParentId, nodes, edges],
+  );
+  const conclusionTypeIds = useMemo(
+    () =>
+      new Set(
+        allTypes.filter((t) => t.name.trim().toUpperCase() === "CONCLUSION").map((t) => t.id),
+      ),
+    [allTypes],
+  );
 
   const footprint = useMemo(() => {
     const set = new Set<number>();
@@ -98,6 +113,14 @@ export function GraphCanvas() {
       visibleNodes.map((n) => {
         const isBlock = !!n.is_block;
         const output = isBlock ? blockOutput(n.id, nodes, edges) : null;
+        const positionRole =
+          outputId != null && n.id === outputId
+            ? "output"
+            : currentParentId == null && n.id === terminusId
+              ? "terminus"
+              : spine.has(n.id) && conclusionTypeIds.has(n.type_id)
+                ? "section"
+                : null;
         return {
           id: String(n.id),
           type: "arg",
@@ -111,10 +134,24 @@ export function GraphCanvas() {
             effective: effectiveById[n.id] ?? n.strength,
             isBlock,
             spineRole: spine.has(n.id) ? "spine" : lateral.has(n.id) ? "lateral" : null,
+            positionRole,
           },
         };
       }),
-    [visibleNodes, nodes, edges, selectedNodeSet, effectiveById, footprint, spine, lateral],
+    [
+      visibleNodes,
+      nodes,
+      edges,
+      selectedNodeSet,
+      effectiveById,
+      footprint,
+      spine,
+      lateral,
+      terminusId,
+      outputId,
+      currentParentId,
+      conclusionTypeIds,
+    ],
   );
 
   const rfEdges = useMemo<RFEdge[]>(
