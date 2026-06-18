@@ -49,10 +49,8 @@ export function GraphCanvas() {
     [edges, visibleNodeIds],
   );
 
-  const effectiveById = useMemo(
-    () => computeEffectiveStrength(visibleNodes, visibleEdges),
-    [visibleNodes, visibleEdges],
-  );
+  // Computed over the whole graph so blocks surface their bridged inner strength.
+  const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
 
   const footprint = useMemo(() => {
     const set = new Set<number>();
