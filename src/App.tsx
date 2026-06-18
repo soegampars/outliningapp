@@ -4,10 +4,12 @@ import { useSpine } from "./state/store";
 import { GraphCanvas } from "./components/GraphCanvas";
 import { Toolbar } from "./components/Toolbar";
 import { PeekPanel } from "./components/PeekPanel";
+import { LinearView } from "./components/LinearView";
 
 export default function App() {
   const load = useSpine((s) => s.load);
   const loaded = useSpine((s) => s.loaded);
+  const view = useSpine((s) => s.view);
 
   useEffect(() => {
     void load();
@@ -18,14 +20,18 @@ export default function App() {
       <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
         <Toolbar />
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-          <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
-            {loaded ? (
-              <GraphCanvas />
-            ) : (
-              <div style={{ padding: 24, color: "var(--text-secondary)" }}>Opening model…</div>
-            )}
-          </div>
-          <PeekPanel />
+          {!loaded ? (
+            <div style={{ padding: 24, color: "var(--text-secondary)" }}>Opening model…</div>
+          ) : view === "linear" ? (
+            <LinearView />
+          ) : (
+            <>
+              <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
+                <GraphCanvas />
+              </div>
+              <PeekPanel />
+            </>
+          )}
         </div>
       </div>
     </ReactFlowProvider>

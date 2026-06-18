@@ -2,22 +2,28 @@ import { create } from "zustand";
 import type { ArgNode, Edge, EdgeKind, NodeType, Source, Strength } from "../model/types";
 import * as repo from "../data/repo";
 import { entryToSource, parseBibtex } from "../lib/bibtex";
+import { topoOrderIds } from "../model/order";
+
+export type ViewMode = "graph" | "linear";
 
 // In-memory projection of the model. Mutations write through to SQLite (repo)
 // and update this store; every view reads from here.
 interface SpineState {
   loaded: boolean;
+  view: ViewMode;
   nodeTypes: NodeType[];
   nodeTypeById: Record<number, NodeType>;
   nodes: ArgNode[];
   edges: Edge[];
   sources: Source[];
   sourceById: Record<number, Source>;
+  linearOrder: number[]; // curated reading order (node ids)
   selectedNodeId: number | null;
   selectedEdgeId: number | null;
-  editingNodeId: number | null; // node whose claim is being edited inline
+  editingNodeId: number | null;
 
   load: () => Promise<void>;
+  setView: (v: ViewMode) => void;
   addNode: (typeId: number, x: number, y: number) => Promise<void>;
   duplicateNode: (id: number) => Promise<void>;
   setNodeClaim: (id: number, claim: string) => Promise<void>;
@@ -25,13 +31,15 @@ interface SpineState {
   setNodeType: (id: number, typeId: number) => Promise<void>;
   setNodeStrength: (id: number, strength: Strength) => Promise<void>;
   setNodeAttention: (id: number, attention: number) => Promise<void>;
-  moveNodeLocal: (id: number, x: number, y: number) => void; // live, during drag
-  persistNodePosition: (id: number) => Promise<void>; // on drag stop
+  moveNodeLocal: (id: number, x: number, y: number) => void;
+  persistNodePosition: (id: number) => Promise<void>;
   removeNode: (id: number) => Promise<void>;
   addEdge: (fromId: number, toId: number) => Promise<void>;
   setEdgeKind: (id: number, kind: EdgeKind) => Promise<void>;
   removeEdge: (id: number) => Promise<void>;
   importBibtex: (text: string) => Promise<{ created: number; updated: number; total: number }>;
+  ensureLinearOrder: () => Promise<void>;
+  setLinearOrder: (ids: number[]) => Promise<void>;
   select: (nodeId: number | null, edgeId: number | null) => void;
   setEditing: (id: number | null) => void;
 }
@@ -44,22 +52,25 @@ function indexSources(sources: Source[]): Record<number, Source> {
 
 export const useSpine = create<SpineState>((set, get) => ({
   loaded: false,
+  view: "graph",
   nodeTypes: [],
   nodeTypeById: {},
   nodes: [],
   edges: [],
   sources: [],
   sourceById: {},
+  linearOrder: [],
   selectedNodeId: null,
   selectedEdgeId: null,
   editingNodeId: null,
 
   async load() {
-    const [nodeTypes, nodes, edges, sources] = await Promise.all([
+    const [nodeTypes, nodes, edges, sources, linearOrder] = await Promise.all([
       repo.listNodeTypes(),
       repo.listNodes(),
       repo.listEdges(),
       repo.listSources(),
+      repo.getLinearOrder(),
     ]);
     const nodeTypeById: Record<number, NodeType> = {};
     for (const t of nodeTypes) nodeTypeById[t.id] = t;
@@ -70,8 +81,14 @@ export const useSpine = create<SpineState>((set, get) => ({
       edges,
       sources,
       sourceById: indexSources(sources),
+      linearOrder,
       loaded: true,
     });
+  },
+
+  setView(v) {
+    if (v === "linear") void get().ensureLinearOrder();
+    set({ view: v });
   },
 
   async addNode(typeId, x, y) {
@@ -89,7 +106,6 @@ export const useSpine = create<SpineState>((set, get) => ({
     set((s) => ({ nodes: [...s.nodes, node], selectedNodeId: id, selectedEdgeId: null }));
   },
 
-  // Duplicate a node with its content and its supports (not its edges).
   async duplicateNode(id) {
     const src = get().nodes.find((n) => n.id === id);
     if (!src) return;
@@ -151,6 +167,7 @@ export const useSpine = create<SpineState>((set, get) => ({
     set((s) => ({
       nodes: s.nodes.filter((n) => n.id !== id),
       edges: s.edges.filter((e) => e.from_id !== id && e.to_id !== id),
+      linearOrder: s.linearOrder.filter((x) => x !== id),
       selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
       editingNodeId: s.editingNodeId === id ? null : s.editingNodeId,
     }));
@@ -178,7 +195,6 @@ export const useSpine = create<SpineState>((set, get) => ({
     }));
   },
 
-  // Import-only; refresh-by-citekey so re-importing never duplicates (§6.5).
   async importBibtex(text) {
     const entries = parseBibtex(text);
     const existing = new Set(get().sources.map((s) => s.key));
@@ -197,6 +213,24 @@ export const useSpine = create<SpineState>((set, get) => ({
     const sources = await repo.listSources();
     set({ sources, sourceById: indexSources(sources) });
     return { created, updated, total: entries.length };
+  },
+
+  // Normalise the curated order: keep the stored sequence (for existing nodes),
+  // then append any nodes not yet placed, in proposed topological order.
+  async ensureLinearOrder() {
+    const { nodes, edges, linearOrder } = get();
+    const existing = new Set(nodes.map((n) => n.id));
+    const kept = linearOrder.filter((id) => existing.has(id));
+    const inKept = new Set(kept);
+    const missing = topoOrderIds(nodes, edges).filter((id) => !inKept.has(id));
+    const order = [...kept, ...missing];
+    set({ linearOrder: order });
+    await repo.replaceLinearOrder(order);
+  },
+
+  async setLinearOrder(ids) {
+    set({ linearOrder: ids });
+    await repo.replaceLinearOrder(ids);
   },
 
   select(nodeId, edgeId) {

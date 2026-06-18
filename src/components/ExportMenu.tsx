@@ -13,11 +13,16 @@ export function ExportMenu() {
   const edges = useSpine((s) => s.edges);
   const nodeTypeById = useSpine((s) => s.nodeTypeById);
   const sources = useSpine((s) => s.sources);
+  const linearOrder = useSpine((s) => s.linearOrder);
 
   const gather = async (scope: ExportScope) => {
     const supports = scope === "complete" ? await repo.listAllSupports() : [];
     const effectiveById = computeEffectiveStrength(nodes, edges);
-    const md = buildExport(scope, { nodes, edges, nodeTypeById, supports, sources, effectiveById });
+    const md = buildExport(
+      scope,
+      { nodes, edges, nodeTypeById, supports, sources, effectiveById },
+      linearOrder,
+    );
     if (import.meta.env.DEV) (window as unknown as { __lastExport?: string }).__lastExport = md;
     return md;
   };

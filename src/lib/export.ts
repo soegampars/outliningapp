@@ -1,4 +1,5 @@
 import type { ArgNode, Edge, NodeType, Source, Strength, Support } from "../model/types";
+import { topoOrderIds } from "../model/order";
 
 // Markdown export (concept §7). Self-describing (opens with a legend) and
 // lossless in the "complete" scope: strength, edge-kind, and source keys are all
@@ -17,44 +18,28 @@ export interface ExportModel {
   effectiveById: Record<number, Strength>;
 }
 
-// Feeders before the moves they support (Kahn's topological sort); cycles and
-// leftovers are appended by id. This is the "proposed initial order" of §7 — the
-// curated linear order (Step 6) will refine it.
-function orderNodes(nodes: ArgNode[], edges: Edge[]): ArgNode[] {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const indeg = new Map<number, number>();
-  for (const n of nodes) indeg.set(n.id, 0);
-  const outAdj = new Map<number, number[]>();
-  for (const e of edges) {
-    if (!byId.has(e.from_id) || !byId.has(e.to_id)) continue;
-    indeg.set(e.to_id, (indeg.get(e.to_id) ?? 0) + 1);
-    const arr = outAdj.get(e.from_id);
-    if (arr) arr.push(e.to_id);
-    else outAdj.set(e.from_id, [e.to_id]);
-  }
-  const queue = nodes
-    .filter((n) => (indeg.get(n.id) ?? 0) === 0)
-    .map((n) => n.id)
-    .sort((a, b) => a - b);
-  const ordered: number[] = [];
-  const seen = new Set<number>();
-  while (queue.length) {
-    const id = queue.shift() as number;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    ordered.push(id);
-    for (const to of (outAdj.get(id) ?? []).slice().sort((a, b) => a - b)) {
-      indeg.set(to, (indeg.get(to) ?? 1) - 1);
-      if ((indeg.get(to) ?? 0) === 0 && !seen.has(to)) queue.push(to);
-    }
-  }
-  for (const n of nodes) if (!seen.has(n.id)) ordered.push(n.id);
-  return ordered.map((id) => byId.get(id)).filter((n): n is ArgNode => !!n);
-}
-
 const kindWord = (kind: string) => (kind === "disjunctive" ? "any-of" : "jointly-required");
 
-export function buildExport(scope: ExportScope, m: ExportModel): string {
+// Resolve the reading order: the curated linear order when given, else the
+// proposed topological order. Any nodes missing from a curated order are
+// appended so nothing is dropped (§7 linearisation rule).
+function resolveOrder(nodes: ArgNode[], edges: Edge[], orderIds?: number[]): ArgNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const base = orderIds && orderIds.length ? orderIds : topoOrderIds(nodes, edges);
+  const out: ArgNode[] = [];
+  const placed = new Set<number>();
+  for (const id of base) {
+    const n = byId.get(id);
+    if (n && !placed.has(id)) {
+      out.push(n);
+      placed.add(id);
+    }
+  }
+  for (const n of nodes) if (!placed.has(n.id)) out.push(n);
+  return out;
+}
+
+export function buildExport(scope: ExportScope, m: ExportModel, orderIds?: number[]): string {
   const { nodes, edges, nodeTypeById, supports, sources, effectiveById } = m;
   const complete = scope === "complete";
   const typeName = (id: number) => nodeTypeById[id]?.name ?? "NODE";
@@ -81,11 +66,11 @@ export function buildExport(scope: ExportScope, m: ExportModel): string {
   out.push("> jointly-required — all such feeders are needed (min); any-of — redundant alternatives (max)");
   out.push("");
   out.push(
-    'Nodes are listed feeders-before-conclusions. Every connection is shown explicitly under "Supported by" / "Feeds into", so non-linear links are never lost.',
+    'Nodes are in reading order. Every connection is shown explicitly under "Supported by" / "Feeds into", so non-linear links are never lost.',
   );
   out.push("");
 
-  for (const n of orderNodes(nodes, edges)) {
+  for (const n of resolveOrder(nodes, edges, orderIds)) {
     const eff = effectiveById[n.id] ?? n.strength;
     out.push(
       `### [${typeName(n.type_id)} · ${n.strength}] ${n.claim || "(untitled)"}  ${anchor(n.id)}` +

@@ -10,6 +10,8 @@ export function Toolbar() {
   const nodeTypes = useSpine((s) => s.nodeTypes);
   const addNode = useSpine((s) => s.addNode);
   const importBibtex = useSpine((s) => s.importBibtex);
+  const view = useSpine((s) => s.view);
+  const setView = useSpine((s) => s.setView);
   const { screenToFlowPosition } = useReactFlow();
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -24,7 +26,7 @@ export function Toolbar() {
 
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-importing the same file
+    e.target.value = "";
     if (!file) return;
     const text = await file.text();
     const r = await importBibtex(text);
@@ -35,9 +37,27 @@ export function Toolbar() {
   return (
     <header className="spine-toolbar">
       <span className="spine-toolbar__title">Spine</span>
-      <button className="spine-btn" onClick={onAdd}>
-        + Add node
-      </button>
+
+      <div className="spine-seg">
+        <button
+          className={"spine-seg__btn" + (view === "graph" ? " active" : "")}
+          onClick={() => setView("graph")}
+        >
+          Graph
+        </button>
+        <button
+          className={"spine-seg__btn" + (view === "linear" ? " active" : "")}
+          onClick={() => setView("linear")}
+        >
+          Linear
+        </button>
+      </div>
+
+      {view === "graph" && (
+        <button className="spine-btn" onClick={onAdd}>
+          + Add node
+        </button>
+      )}
       <button className="spine-btn" onClick={() => fileRef.current?.click()}>
         Import .bib
       </button>
@@ -49,8 +69,11 @@ export function Toolbar() {
         onChange={onFile}
       />
       <ExportMenu />
+
       <span className="spine-toolbar__hint">
-        Double-click to add · drag to connect · Ctrl+D duplicate · click + Delete to remove
+        {view === "graph"
+          ? "Double-click to add · drag to connect · Ctrl+D duplicate · click + Delete to remove"
+          : "Reorder with ↑ ↓ · click a claim to open it in the graph"}
       </span>
       <span className="spine-toolbar__spacer" />
       {msg && <span className="spine-toolbar__msg">{msg}</span>}

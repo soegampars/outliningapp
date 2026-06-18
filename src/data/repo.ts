@@ -136,6 +136,25 @@ export async function listAllSupports(): Promise<Support[]> {
   );
 }
 
+// --- Curated linear order (concept §3 view-state, §10.6) ---
+
+export async function getLinearOrder(): Promise<number[]> {
+  const db = await conn();
+  const rows = await db.select<{ node_id: number }>(
+    "SELECT node_id FROM linear_order ORDER BY position",
+  );
+  return rows.map((r) => r.node_id);
+}
+
+export async function replaceLinearOrder(ids: number[]): Promise<void> {
+  const db = await conn();
+  await db.execute("DELETE FROM linear_order");
+  let pos = 0;
+  for (const id of ids) {
+    await db.execute("INSERT INTO linear_order (node_id, position) VALUES ($1, $2)", [id, pos++]);
+  }
+}
+
 export async function createSupport(
   nodeId: number,
   text: string,
