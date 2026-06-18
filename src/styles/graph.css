@@ -122,6 +122,24 @@
   color: var(--text-secondary);
   font-size: 12px;
 }
+.spine-toolbar__msg {
+  color: var(--strength-strong);
+  font-size: 12px;
+}
+
+/* Citation info line under a linked support (Zotero-style, §3). */
+.peek-cite {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.peek-cite__label {
+  color: var(--support-citation);
+  font-weight: 600;
+}
+.peek-cite__venue {
+  font-style: italic;
+}
 
 .spine-btn {
   background: var(--node-surface);

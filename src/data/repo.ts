@@ -184,3 +184,28 @@ export async function createNodeFull(n: {
   );
   return Number(r.lastInsertId);
 }
+
+// Import-only, refresh-by-stable-key (concept §3, §6.5): match on citekey and
+// update the record in place, never creating a duplicate. The canonical library
+// stays in Zotero.
+export async function upsertSource(s: {
+  key: string;
+  author: string | null;
+  year: string | null;
+  title: string | null;
+  venue: string | null;
+  raw_bibtex: string;
+}): Promise<void> {
+  const db = await conn();
+  await db.execute(
+    `INSERT INTO source (key, author, year, title, venue, raw_bibtex)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT(key) DO UPDATE SET
+       author = excluded.author,
+       year = excluded.year,
+       title = excluded.title,
+       venue = excluded.venue,
+       raw_bibtex = excluded.raw_bibtex`,
+    [s.key, s.author, s.year, s.title, s.venue, s.raw_bibtex],
+  );
+}

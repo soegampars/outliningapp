@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import type { ArgNode, Edge, EdgeKind, NodeType, Strength } from "../model/types";
+import type { ArgNode, Edge, EdgeKind, NodeType, Source, Strength } from "../model/types";
 import * as repo from "../data/repo";
+import { entryToSource, parseBibtex } from "../lib/bibtex";
 
 // In-memory projection of the model. Mutations write through to SQLite (repo)
 // and update this store; every view reads from here.
@@ -10,6 +11,8 @@ interface SpineState {
   nodeTypeById: Record<number, NodeType>;
   nodes: ArgNode[];
   edges: Edge[];
+  sources: Source[];
+  sourceById: Record<number, Source>;
   selectedNodeId: number | null;
   selectedEdgeId: number | null;
   editingNodeId: number | null; // node whose claim is being edited inline
@@ -28,8 +31,15 @@ interface SpineState {
   addEdge: (fromId: number, toId: number) => Promise<void>;
   setEdgeKind: (id: number, kind: EdgeKind) => Promise<void>;
   removeEdge: (id: number) => Promise<void>;
+  importBibtex: (text: string) => Promise<{ created: number; updated: number; total: number }>;
   select: (nodeId: number | null, edgeId: number | null) => void;
   setEditing: (id: number | null) => void;
+}
+
+function indexSources(sources: Source[]): Record<number, Source> {
+  const byId: Record<number, Source> = {};
+  for (const s of sources) byId[s.id] = s;
+  return byId;
 }
 
 export const useSpine = create<SpineState>((set, get) => ({
@@ -38,19 +48,30 @@ export const useSpine = create<SpineState>((set, get) => ({
   nodeTypeById: {},
   nodes: [],
   edges: [],
+  sources: [],
+  sourceById: {},
   selectedNodeId: null,
   selectedEdgeId: null,
   editingNodeId: null,
 
   async load() {
-    const [nodeTypes, nodes, edges] = await Promise.all([
+    const [nodeTypes, nodes, edges, sources] = await Promise.all([
       repo.listNodeTypes(),
       repo.listNodes(),
       repo.listEdges(),
+      repo.listSources(),
     ]);
     const nodeTypeById: Record<number, NodeType> = {};
     for (const t of nodeTypes) nodeTypeById[t.id] = t;
-    set({ nodeTypes, nodeTypeById, nodes, edges, loaded: true });
+    set({
+      nodeTypes,
+      nodeTypeById,
+      nodes,
+      edges,
+      sources,
+      sourceById: indexSources(sources),
+      loaded: true,
+    });
   },
 
   async addNode(typeId, x, y) {
@@ -155,6 +176,27 @@ export const useSpine = create<SpineState>((set, get) => ({
       edges: s.edges.filter((e) => e.id !== id),
       selectedEdgeId: s.selectedEdgeId === id ? null : s.selectedEdgeId,
     }));
+  },
+
+  // Import-only; refresh-by-citekey so re-importing never duplicates (§6.5).
+  async importBibtex(text) {
+    const entries = parseBibtex(text);
+    const existing = new Set(get().sources.map((s) => s.key));
+    let created = 0;
+    let updated = 0;
+    for (const e of entries) {
+      const src = entryToSource(e);
+      if (!src.key) continue;
+      if (existing.has(src.key)) updated++;
+      else {
+        created++;
+        existing.add(src.key);
+      }
+      await repo.upsertSource(src);
+    }
+    const sources = await repo.listSources();
+    set({ sources, sourceById: indexSources(sources) });
+    return { created, updated, total: entries.length };
   },
 
   select(nodeId, edgeId) {

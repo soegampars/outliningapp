@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSpine } from "../state/store";
 import * as repo from "../data/repo";
-import type { Source, Support } from "../model/types";
+import type { Support } from "../model/types";
 import { STRENGTHS } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
+import { shortLabel } from "../lib/bibtex";
 
 // The minute-to-minute inspector (§4.2). Opens beside the canvas — the skeleton
 // stays on screen; this is not a mode switch. Edits write straight through the
@@ -15,6 +16,8 @@ export function PeekPanel() {
   const nodeTypeById = useSpine((s) => s.nodeTypeById);
   const nodes = useSpine((s) => s.nodes);
   const edges = useSpine((s) => s.edges);
+  const sources = useSpine((s) => s.sources);
+  const sourceById = useSpine((s) => s.sourceById);
   const setNodeClaim = useSpine((s) => s.setNodeClaim);
   const setNodeBody = useSpine((s) => s.setNodeBody);
   const setNodeType = useSpine((s) => s.setNodeType);
@@ -26,14 +29,12 @@ export function PeekPanel() {
   const [claim, setClaim] = useState("");
   const [body, setBody] = useState("");
   const [supports, setSupports] = useState<Support[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
 
   const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
 
   useEffect(() => {
     if (selectedNodeId == null) return;
     void repo.listSupportsForNode(selectedNodeId).then(setSupports);
-    void repo.listSources().then(setSources);
   }, [selectedNodeId]);
 
   // Keep claim/body drafts in sync with the selected node (store only changes on
@@ -151,6 +152,7 @@ export function PeekPanel() {
       <div className="peek-section">
         <label className="peek-section__label">Supports ({supports.length})</label>
         {supports.map((s) => {
+          const src = s.source_id != null ? sourceById[s.source_id] : undefined;
           const isCite = s.source_id != null;
           return (
             <div key={s.id} className={"peek-support" + (isCite ? " citation" : "")}>
@@ -166,9 +168,9 @@ export function PeekPanel() {
                   }
                 >
                   <option value="">Own reasoning</option>
-                  {sources.map((src) => (
-                    <option key={src.id} value={src.id}>
-                      {src.key}
+                  {sources.map((src2) => (
+                    <option key={src2.id} value={src2.id}>
+                      {src2.key}
                     </option>
                   ))}
                 </select>
@@ -180,6 +182,13 @@ export function PeekPanel() {
                   ✕
                 </button>
               </div>
+              {src && (
+                <div className="peek-cite">
+                  <span className="peek-cite__label">{shortLabel(src.author, src.year)}</span>
+                  {src.title ? <span> — {src.title}</span> : null}
+                  {src.venue ? <span className="peek-cite__venue"> · {src.venue}</span> : null}
+                </div>
+              )}
               <textarea
                 defaultValue={s.text}
                 placeholder="Paraphrase, quote, or your own gloss"
@@ -190,8 +199,8 @@ export function PeekPanel() {
         })}
         {sources.length === 0 && (
           <span className="peek-empty">
-            Import BibTeX sources (Step 4) to attach citations; supports are your own reasoning for
-            now.
+            Import a .bib file (toolbar) to attach citations; supports are your own reasoning until
+            then.
           </span>
         )}
         <button className="peek-btn-add" onClick={() => void addSupport()}>
