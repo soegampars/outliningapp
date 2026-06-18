@@ -114,6 +114,11 @@ export async function deleteEdge(id: number): Promise<void> {
   await db.execute("DELETE FROM edge WHERE id = $1", [id]);
 }
 
+export async function updateEdgeKind(id: number, kind: EdgeKind): Promise<void> {
+  const db = await conn();
+  await db.execute("UPDATE edge SET kind = $1 WHERE id = $2", [kind, id]);
+}
+
 // --- Supports (one use of evidence on one node; §3) ---
 
 export async function listSupportsForNode(nodeId: number): Promise<Support[]> {

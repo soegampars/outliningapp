@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ArgNode, Edge, NodeType, Strength } from "../model/types";
+import type { ArgNode, Edge, EdgeKind, NodeType, Strength } from "../model/types";
 import * as repo from "../data/repo";
 
 // In-memory projection of the model. Mutations write through to SQLite (repo)
@@ -26,6 +26,7 @@ interface SpineState {
   persistNodePosition: (id: number) => Promise<void>; // on drag stop
   removeNode: (id: number) => Promise<void>;
   addEdge: (fromId: number, toId: number) => Promise<void>;
+  setEdgeKind: (id: number, kind: EdgeKind) => Promise<void>;
   removeEdge: (id: number) => Promise<void>;
   select: (nodeId: number | null, edgeId: number | null) => void;
   setEditing: (id: number | null) => void;
@@ -141,6 +142,11 @@ export const useSpine = create<SpineState>((set, get) => ({
     set((s) => ({
       edges: [...s.edges, { id, from_id: fromId, to_id: toId, kind: "conjunctive" }],
     }));
+  },
+
+  async setEdgeKind(id, kind) {
+    await repo.updateEdgeKind(id, kind);
+    set((s) => ({ edges: s.edges.map((e) => (e.id === id ? { ...e, kind } : e)) }));
   },
 
   async removeEdge(id) {

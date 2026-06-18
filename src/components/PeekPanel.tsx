@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSpine } from "../state/store";
 import * as repo from "../data/repo";
 import type { Source, Support } from "../model/types";
 import { STRENGTHS } from "../model/types";
+import { computeEffectiveStrength } from "../model/strength";
 
 // The minute-to-minute inspector (§4.2). Opens beside the canvas — the skeleton
 // stays on screen; this is not a mode switch. Edits write straight through the
@@ -19,12 +20,15 @@ export function PeekPanel() {
   const setNodeType = useSpine((s) => s.setNodeType);
   const setNodeStrength = useSpine((s) => s.setNodeStrength);
   const setNodeAttention = useSpine((s) => s.setNodeAttention);
+  const setEdgeKind = useSpine((s) => s.setEdgeKind);
   const select = useSpine((s) => s.select);
 
   const [claim, setClaim] = useState("");
   const [body, setBody] = useState("");
   const [supports, setSupports] = useState<Support[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
+
+  const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
 
   useEffect(() => {
     if (selectedNodeId == null) return;
@@ -41,6 +45,7 @@ export function PeekPanel() {
 
   if (!node) return null;
   const nid = node.id;
+  const effective = effectiveById[nid] ?? node.strength;
 
   const feeders = edges.filter((e) => e.to_id === nid);
   const dependents = edges.filter((e) => e.from_id === nid);
@@ -70,6 +75,8 @@ export function PeekPanel() {
     await repo.deleteSupport(s.id);
     setSupports((prev) => prev.filter((x) => x.id !== s.id));
   };
+
+  const kindLabel = (kind: string) => (kind === "disjunctive" ? "any-of" : "all-of");
 
   return (
     <aside className="peek-panel">
@@ -133,6 +140,12 @@ export function PeekPanel() {
             </button>
           ))}
         </div>
+        {effective !== node.strength && (
+          <div className="peek-effective">
+            Effective: <b className={"eff-" + effective}>{effective}</b> — weakest link through its
+            feeders
+          </div>
+        )}
       </div>
 
       <div className="peek-section">
@@ -193,7 +206,16 @@ export function PeekPanel() {
           <button key={e.id} className="peek-conn" onClick={() => select(e.from_id, null)}>
             <span className="peek-conn__type">{typeName(e.from_id)}</span>
             <span className="peek-claim-line">{nodeById(e.from_id)?.claim || "(untitled)"}</span>
-            <span className="peek-conn__kind">{e.kind === "disjunctive" ? "any-of" : "all-of"}</span>
+            <span
+              className="peek-conn__kind"
+              title="Toggle all-of / any-of"
+              onClick={(ev) => {
+                ev.stopPropagation();
+                void setEdgeKind(e.id, e.kind === "disjunctive" ? "conjunctive" : "disjunctive");
+              }}
+            >
+              {kindLabel(e.kind)}
+            </span>
           </button>
         ))}
       </div>
@@ -207,7 +229,16 @@ export function PeekPanel() {
           <button key={e.id} className="peek-conn" onClick={() => select(e.to_id, null)}>
             <span className="peek-conn__type">{typeName(e.to_id)}</span>
             <span className="peek-claim-line">{nodeById(e.to_id)?.claim || "(untitled)"}</span>
-            <span className="peek-conn__kind">{e.kind === "disjunctive" ? "any-of" : "all-of"}</span>
+            <span
+              className="peek-conn__kind"
+              title="Toggle all-of / any-of"
+              onClick={(ev) => {
+                ev.stopPropagation();
+                void setEdgeKind(e.id, e.kind === "disjunctive" ? "conjunctive" : "disjunctive");
+              }}
+            >
+              {kindLabel(e.kind)}
+            </span>
           </button>
         ))}
       </div>

@@ -381,3 +381,41 @@
   font-size: 12px;
   font-style: italic;
 }
+
+/* Strength accent on nodes — effective (propagated) strength (§3, §5). */
+.spine-node.strength-strong {
+  border-left-color: var(--strength-strong);
+}
+.spine-node.strength-unfinished {
+  border-left-color: var(--strength-unfinished);
+}
+.spine-node.strength-weak {
+  border-left-color: var(--strength-weak);
+}
+
+/* Effective-strength note in the inspector. */
+.peek-effective {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.peek-effective b {
+  font-weight: 600;
+}
+.peek-effective .eff-strong {
+  color: var(--strength-strong);
+}
+.peek-effective .eff-unfinished {
+  color: var(--strength-unfinished);
+}
+.peek-effective .eff-weak {
+  color: var(--strength-weak);
+}
+
+/* The all-of / any-of label is a toggle. */
+.peek-conn__kind {
+  cursor: pointer;
+}
+.peek-conn__kind:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}

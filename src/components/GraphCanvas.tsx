@@ -13,6 +13,7 @@ import {
   type OnConnect,
 } from "@xyflow/react";
 import { useSpine } from "../state/store";
+import { computeEffectiveStrength } from "../model/strength";
 import { ArgNodeView } from "./ArgNodeView";
 
 const nodeTypes = { arg: ArgNodeView };
@@ -27,6 +28,7 @@ export function GraphCanvas() {
   const persistNodePosition = useSpine((s) => s.persistNodePosition);
   const addEdge = useSpine((s) => s.addEdge);
   const addNode = useSpine((s) => s.addNode);
+  const setEdgeKind = useSpine((s) => s.setEdgeKind);
   const select = useSpine((s) => s.select);
   const setEditing = useSpine((s) => s.setEditing);
 
@@ -67,6 +69,9 @@ export function GraphCanvas() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Effective (propagated) strength drives the node accent colour (§3, §5).
+  const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
+
   const rfNodes = useMemo<RFNode[]>(
     () =>
       nodes.map((n) => ({
@@ -77,11 +82,11 @@ export function GraphCanvas() {
         data: {
           claim: n.claim,
           typeId: n.type_id,
-          strength: n.strength,
           attention: n.attention,
+          effective: effectiveById[n.id] ?? n.strength,
         },
       })),
-    [nodes, selectedNodeId],
+    [nodes, selectedNodeId, effectiveById],
   );
 
   const rfEdges = useMemo<RFEdge[]>(
@@ -92,6 +97,8 @@ export function GraphCanvas() {
         target: String(e.to_id),
         selected: e.id === selectedEdgeId,
         markerEnd: { type: MarkerType.ArrowClosed },
+        // Disjunctive ("any-of") feeders render dashed; conjunctive solid (§5).
+        style: e.kind === "disjunctive" ? { strokeDasharray: "7 5" } : undefined,
       })),
     [edges, selectedEdgeId],
   );
@@ -141,6 +148,15 @@ export function GraphCanvas() {
     [setEditing],
   );
 
+  // Double-click an edge to flip conjunctive <-> disjunctive.
+  const onEdgeDoubleClick = useCallback(
+    (_e: ReactMouseEvent, edge: RFEdge) => {
+      const cur = useSpine.getState().edges.find((x) => x.id === Number(edge.id));
+      if (cur) void setEdgeKind(cur.id, cur.kind === "conjunctive" ? "disjunctive" : "conjunctive");
+    },
+    [setEdgeKind],
+  );
+
   const onPaneDoubleClick = useCallback(
     (e: ReactMouseEvent) => {
       const target = e.target as HTMLElement;
@@ -163,6 +179,7 @@ export function GraphCanvas() {
         onEdgesChange={onEdgesChange}
         onNodeDragStop={onNodeDragStop}
         onNodeDoubleClick={onNodeDoubleClick}
+        onEdgeDoubleClick={onEdgeDoubleClick}
         onConnect={onConnect}
         onPaneClick={onPaneClick}
         colorMode="dark"

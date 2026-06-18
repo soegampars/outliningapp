@@ -4,12 +4,12 @@ import { useSpine } from "../state/store";
 import type { Strength } from "../model/types";
 
 // Data carried on each React Flow node. Derived from the model in GraphCanvas;
-// the component reads these props and calls store actions to edit.
+// `effective` is the propagated weakest-link strength that colours the node.
 export interface ArgNodeData {
   claim: string;
   typeId: number;
-  strength: Strength;
   attention: number;
+  effective: Strength;
   [key: string]: unknown;
 }
 
@@ -46,7 +46,7 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
   const cancel = () => setEditing(null);
 
   return (
-    <div className={"spine-node" + (selected ? " selected" : "")}>
+    <div className={`spine-node strength-${d.effective}${selected ? " selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
 
       <div className="spine-node__head">
