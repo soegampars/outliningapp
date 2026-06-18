@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSpine } from "../state/store";
 import { computeEffectiveStrength } from "../model/strength";
+import { gapTypeIds } from "../model/gaps";
 import { buildExport, type ExportScope } from "../lib/export";
 
 // Export to self-describing Markdown (§7). Copy straight to the clipboard for
@@ -17,7 +18,7 @@ export function ExportMenu() {
 
   const gather = (scope: ExportScope) => {
     const supports = scope === "complete" ? allSupports : [];
-    const effectiveById = computeEffectiveStrength(nodes, edges);
+    const effectiveById = computeEffectiveStrength(nodes, edges, gapTypeIds(nodeTypeById));
     const md = buildExport(
       scope,
       { nodes, edges, nodeTypeById, supports, sources, effectiveById },

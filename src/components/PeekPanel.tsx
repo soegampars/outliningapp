@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSpine } from "../state/store";
 import { STRENGTHS } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
+import { gapTypeIds, isGapTypeName } from "../model/gaps";
 import { shortLabel } from "../lib/bibtex";
 
 // The minute-to-minute inspector (§4.2). Opens beside the canvas — the skeleton
@@ -34,7 +35,11 @@ export function PeekPanel() {
   const [claim, setClaim] = useState("");
   const [body, setBody] = useState("");
 
-  const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
+  const gapIds = useMemo(() => gapTypeIds(nodeTypes), [nodeTypes]);
+  const effectiveById = useMemo(
+    () => computeEffectiveStrength(nodes, edges, gapIds),
+    [nodes, edges, gapIds],
+  );
   const supports = useMemo(
     () => allSupports.filter((s) => s.node_id === selectedNodeId),
     [allSupports, selectedNodeId],
@@ -51,6 +56,7 @@ export function PeekPanel() {
 
   const feeders = edges.filter((e) => e.to_id === nid);
   const dependents = edges.filter((e) => e.from_id === nid);
+  const isGapNode = isGapTypeName(nodeTypeById[node.type_id]?.name);
   const nodeById = (id: number) => nodes.find((n) => n.id === id);
   const typeName = (id: number) => {
     const n = nodeById(id);
@@ -143,6 +149,13 @@ export function PeekPanel() {
           <div className="peek-effective">
             Effective: <b className={"eff-" + effective}>{effective}</b> — weakest link through its
             feeders
+          </div>
+        )}
+        {isGapNode && (
+          <div className={"peek-gapnote " + (dependents.length ? "broken" : "open")}>
+            {dependents.length
+              ? "Load-bearing gap — everything resting on it reads as broken until you fill it."
+              : "Terminus gap — a legitimate open ending; it is not flagged as a defect."}
           </div>
         )}
       </div>

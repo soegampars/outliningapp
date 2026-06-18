@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useSpine } from "../state/store";
+import { isGapTypeName } from "../model/gaps";
 import type { Strength } from "../model/types";
 
 // Data carried on each React Flow node. Derived from the model in GraphCanvas;
@@ -46,10 +47,12 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
   };
   const cancel = () => setEditing(null);
 
+  const isGap = isGapTypeName(nodeTypes.find((t) => t.id === d.typeId)?.name);
   const cls =
     `spine-node strength-${d.effective}` +
     (selected ? " selected" : "") +
-    (d.isBlock ? " spine-node--block" : "");
+    (d.isBlock ? " spine-node--block" : "") +
+    (isGap ? " spine-node--gap" : "");
 
   return (
     <div className={cls}>

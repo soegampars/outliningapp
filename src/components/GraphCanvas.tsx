@@ -14,6 +14,7 @@ import {
 } from "@xyflow/react";
 import { useSpine } from "../state/store";
 import { computeEffectiveStrength } from "../model/strength";
+import { gapTypeIds } from "../model/gaps";
 import { blockOutput } from "../model/blocks";
 import { ArgNodeView } from "./ArgNodeView";
 
@@ -50,7 +51,11 @@ export function GraphCanvas() {
   );
 
   // Computed over the whole graph so blocks surface their bridged inner strength.
-  const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
+  const gapIds = useMemo(() => gapTypeIds(allTypes), [allTypes]);
+  const effectiveById = useMemo(
+    () => computeEffectiveStrength(nodes, edges, gapIds),
+    [nodes, edges, gapIds],
+  );
 
   const footprint = useMemo(() => {
     const set = new Set<number>();

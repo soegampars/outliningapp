@@ -487,6 +487,14 @@
   font-weight: 700;
 }
 
+/* Gap / placeholder node (v2-D) — a known hole. Dashed outline marks it as a
+   slot to fill; the left strength accent still reads (broken when load-bearing). */
+.spine-node--gap {
+  border-top: 1px dashed var(--text-secondary);
+  border-right: 1px dashed var(--text-secondary);
+  border-bottom: 1px dashed var(--text-secondary);
+}
+
 /* Breadcrumb (inside a block) */
 .breadcrumb {
   display: flex;
@@ -853,6 +861,23 @@
 }
 .peek-effective .eff-weak {
   color: var(--strength-weak);
+}
+
+/* Gap note in the inspector (v2-D) — broken vs intended open ending. */
+.peek-gapnote {
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-top: 8px;
+}
+.peek-gapnote.broken {
+  color: var(--strength-weak);
+  border: 1px solid var(--strength-weak);
+}
+.peek-gapnote.open {
+  color: var(--text-secondary);
+  border: 1px dashed var(--edge-default);
 }
 
 /* The all-of / any-of label is a toggle. */
