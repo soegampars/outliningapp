@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import {
   Background,
@@ -7,10 +7,10 @@ import {
   ReactFlow,
   useReactFlow,
   type Edge as RFEdge,
-  type EdgeChange,
   type Node as RFNode,
   type NodeChange,
   type OnConnect,
+  type OnSelectionChangeParams,
 } from "@xyflow/react";
 import { useSpine } from "../state/store";
 import { computeEffectiveStrength } from "../model/strength";
@@ -23,52 +23,20 @@ export function GraphCanvas() {
   const edges = useSpine((s) => s.edges);
   const supports = useSpine((s) => s.supports);
   const allTypes = useSpine((s) => s.nodeTypes);
-  const selectedNodeId = useSpine((s) => s.selectedNodeId);
-  const selectedEdgeId = useSpine((s) => s.selectedEdgeId);
+  const selectedNodeIds = useSpine((s) => s.selectedNodeIds);
+  const selectedEdgeIds = useSpine((s) => s.selectedEdgeIds);
   const focusedSourceId = useSpine((s) => s.focusedSourceId);
   const moveNodeLocal = useSpine((s) => s.moveNodeLocal);
   const persistNodePosition = useSpine((s) => s.persistNodePosition);
   const addEdge = useSpine((s) => s.addEdge);
   const addNode = useSpine((s) => s.addNode);
-  const select = useSpine((s) => s.select);
+  const setSelection = useSpine((s) => s.setSelection);
   const setEditing = useSpine((s) => s.setEditing);
 
   const { screenToFlowPosition } = useReactFlow();
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      const inField =
-        !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
-      if (inField) return;
-
-      if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
-        const sel = useSpine.getState().selectedNodeId;
-        if (sel != null) {
-          e.preventDefault();
-          void useSpine.getState().duplicateNode(sel);
-        }
-        return;
-      }
-
-      if (e.key === "Delete" || e.key === "Backspace") {
-        const st = useSpine.getState();
-        if (st.selectedEdgeId != null) {
-          e.preventDefault();
-          void st.removeEdge(st.selectedEdgeId);
-        } else if (st.selectedNodeId != null) {
-          e.preventDefault();
-          void st.removeNode(st.selectedNodeId);
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
 
-  // Footprint: nodes citing the focused source (§6.4 highlight).
   const footprint = useMemo(() => {
     const set = new Set<number>();
     if (focusedSourceId != null) {
@@ -77,13 +45,16 @@ export function GraphCanvas() {
     return set;
   }, [supports, focusedSourceId]);
 
+  const selectedNodeSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
+  const selectedEdgeSet = useMemo(() => new Set(selectedEdgeIds), [selectedEdgeIds]);
+
   const rfNodes = useMemo<RFNode[]>(
     () =>
       nodes.map((n) => ({
         id: String(n.id),
         type: "arg",
         position: { x: n.pos_x, y: n.pos_y },
-        selected: n.id === selectedNodeId,
+        selected: selectedNodeSet.has(n.id),
         className: footprint.has(n.id) ? "footprint" : undefined,
         data: {
           claim: n.claim,
@@ -92,7 +63,7 @@ export function GraphCanvas() {
           effective: effectiveById[n.id] ?? n.strength,
         },
       })),
-    [nodes, selectedNodeId, effectiveById, footprint],
+    [nodes, selectedNodeSet, effectiveById, footprint],
   );
 
   const rfEdges = useMemo<RFEdge[]>(
@@ -101,43 +72,38 @@ export function GraphCanvas() {
         id: String(e.id),
         source: String(e.from_id),
         target: String(e.to_id),
-        selected: e.id === selectedEdgeId,
+        selected: selectedEdgeSet.has(e.id),
         markerEnd: { type: MarkerType.ArrowClosed },
         style: e.kind === "disjunctive" ? { strokeDasharray: "7 5" } : undefined,
       })),
-    [edges, selectedEdgeId],
+    [edges, selectedEdgeSet],
   );
 
+  // Apply position live during drag (moves the whole selection together); persist
+  // each node when its drag ends (dragging === false).
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       for (const c of changes) {
-        if (c.type === "position" && c.position) {
-          moveNodeLocal(Number(c.id), c.position.x, c.position.y);
+        if (c.type === "position") {
+          if (c.position) moveNodeLocal(Number(c.id), c.position.x, c.position.y);
+          if (c.dragging === false) void persistNodePosition(Number(c.id));
         }
       }
-      const sel = changes.find((c) => c.type === "select" && c.selected);
-      if (sel && sel.type === "select") select(Number(sel.id), null);
-    },
-    [moveNodeLocal, select],
-  );
-
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
-      const sel = changes.find((c) => c.type === "select" && c.selected);
-      if (sel && sel.type === "select") select(null, Number(sel.id));
-    },
-    [select],
-  );
-
-  const onPaneClick = useCallback(() => select(null, null), [select]);
-
-  const onNodeDragStop = useCallback(
-    (_e: MouseEvent | TouchEvent, node: RFNode) => {
-      moveNodeLocal(Number(node.id), node.position.x, node.position.y);
-      void persistNodePosition(Number(node.id));
     },
     [moveNodeLocal, persistNodePosition],
   );
+
+  const onSelectionChange = useCallback(
+    (p: OnSelectionChangeParams) => {
+      setSelection(
+        p.nodes.map((n) => Number(n.id)),
+        p.edges.map((e) => Number(e.id)),
+      );
+    },
+    [setSelection],
+  );
+
+  const onPaneClick = useCallback(() => setSelection([], []), [setSelection]);
 
   const onConnect = useCallback<OnConnect>(
     (c) => {
@@ -178,15 +144,18 @@ export function GraphCanvas() {
         edges={rfEdges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeDragStop={onNodeDragStop}
+        onEdgesChange={() => {}}
         onNodeDoubleClick={onNodeDoubleClick}
         onEdgeDoubleClick={onEdgeDoubleClick}
         onConnect={onConnect}
+        onSelectionChange={onSelectionChange}
         onPaneClick={onPaneClick}
         colorMode="dark"
         zoomOnDoubleClick={false}
         deleteKeyCode={null}
+        selectionOnDrag
+        panOnDrag={[1, 2]}
+        panActivationKeyCode="Space"
         minZoom={0.2}
         maxZoom={2.5}
         fitView

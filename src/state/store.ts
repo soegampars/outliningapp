@@ -3,6 +3,7 @@ import type { ArgNode, Edge, EdgeKind, NodeType, Source, Strength, Support } fro
 import * as repo from "../data/repo";
 import { entryToSource, parseBibtex } from "../lib/bibtex";
 import { topoOrderIds } from "../model/order";
+import { openProject, parseProject, saveProject, serializeProject } from "../lib/projectFile";
 
 export type ViewMode = "graph" | "linear";
 
@@ -19,18 +20,27 @@ interface SpineState {
   sources: Source[];
   sourceById: Record<number, Source>;
   linearOrder: number[];
-  selectedNodeId: number | null;
+  selectedNodeId: number | null; // the single selected node (drives the inspector)
   selectedEdgeId: number | null;
+  selectedNodeIds: number[]; // full multi-selection (for bulk move/delete)
+  selectedEdgeIds: number[];
   editingNodeId: number | null;
-  sourcesOpen: boolean; // provenance panel toggle
-  focusedSourceId: number | null; // highlight this source's footprint on the canvas
-  currentFileName: string | null; // open project file (display)
-  currentFilePath: string | null; // open project file (full path, for overwrite-on-Save)
+  sourcesOpen: boolean;
+  focusedSourceId: number | null;
+  currentFileName: string | null;
+  currentFilePath: string | null;
+  pendingFileAction: "new" | "open" | null; // a confirmation is awaiting the user
+  fileMessage: string;
 
   load: () => Promise<void>;
   newProject: () => Promise<void>;
   loadProjectData: (p: repo.ProjectData) => Promise<void>;
   setCurrentFile: (name: string | null, path: string | null) => Promise<void>;
+  saveCurrent: (forceDialog: boolean) => Promise<void>;
+  requestNewProject: () => void;
+  requestOpenProject: () => void;
+  confirmFileAction: () => Promise<void>;
+  cancelFileAction: () => void;
   setView: (v: ViewMode) => void;
   addNode: (typeId: number, x: number, y: number) => Promise<void>;
   duplicateNode: (id: number) => Promise<void>;
@@ -45,6 +55,7 @@ interface SpineState {
   addEdge: (fromId: number, toId: number) => Promise<void>;
   setEdgeKind: (id: number, kind: EdgeKind) => Promise<void>;
   removeEdge: (id: number) => Promise<void>;
+  removeSelected: () => Promise<void>;
   addSupport: (nodeId: number) => Promise<void>;
   setSupportText: (id: number, text: string) => Promise<void>;
   setSupportSource: (id: number, sourceId: number | null) => Promise<void>;
@@ -53,6 +64,7 @@ interface SpineState {
   ensureLinearOrder: () => Promise<void>;
   setLinearOrder: (ids: number[]) => Promise<void>;
   select: (nodeId: number | null, edgeId: number | null) => void;
+  setSelection: (nodeIds: number[], edgeIds: number[]) => void;
   setEditing: (id: number | null) => void;
   toggleSources: () => void;
   focusSource: (id: number | null) => void;
@@ -64,295 +76,413 @@ function indexSources(sources: Source[]): Record<number, Source> {
   return byId;
 }
 
-export const useSpine = create<SpineState>((set, get) => ({
-  loaded: false,
-  view: "graph",
-  nodeTypes: [],
-  nodeTypeById: {},
-  nodes: [],
-  edges: [],
-  supports: [],
-  sources: [],
-  sourceById: {},
-  linearOrder: [],
-  selectedNodeId: null,
-  selectedEdgeId: null,
-  editingNodeId: null,
-  sourcesOpen: false,
-  focusedSourceId: null,
-  currentFileName: null,
-  currentFilePath: null,
+export const useSpine = create<SpineState>((set, get) => {
+  const flash = (msg: string) => {
+    set({ fileMessage: msg });
+    setTimeout(() => {
+      if (get().fileMessage === msg) set({ fileMessage: "" });
+    }, 3000);
+  };
 
-  async load() {
-    const [nodeTypes, nodes, edges, supports, sources, linearOrder, fileName, filePath] =
-      await Promise.all([
-        repo.listNodeTypes(),
-        repo.listNodes(),
-        repo.listEdges(),
-        repo.listAllSupports(),
-        repo.listSources(),
-        repo.getLinearOrder(),
-        repo.getMeta("currentFileName"),
-        repo.getMeta("currentFilePath"),
-      ]);
-    const nodeTypeById: Record<number, NodeType> = {};
-    for (const t of nodeTypes) nodeTypeById[t.id] = t;
-    set({
-      nodeTypes,
-      nodeTypeById,
-      nodes,
-      edges,
-      supports,
-      sources,
-      sourceById: indexSources(sources),
-      linearOrder,
-      currentFileName: fileName,
-      currentFilePath: filePath,
-      loaded: true,
-    });
-  },
+  return {
+    loaded: false,
+    view: "graph",
+    nodeTypes: [],
+    nodeTypeById: {},
+    nodes: [],
+    edges: [],
+    supports: [],
+    sources: [],
+    sourceById: {},
+    linearOrder: [],
+    selectedNodeId: null,
+    selectedEdgeId: null,
+    selectedNodeIds: [],
+    selectedEdgeIds: [],
+    editingNodeId: null,
+    sourcesOpen: false,
+    focusedSourceId: null,
+    currentFileName: null,
+    currentFilePath: null,
+    pendingFileAction: null,
+    fileMessage: "",
 
-  // Replace the working project with a fresh, empty one (default node types).
-  async newProject() {
-    await repo.wipeAll();
-    await repo.seedDefaultTypes();
-    await repo.setMeta("currentFileName", null);
-    await repo.setMeta("currentFilePath", null);
-    await get().load();
-    set({
-      view: "graph",
-      selectedNodeId: null,
-      selectedEdgeId: null,
-      editingNodeId: null,
-      sourcesOpen: false,
-      focusedSourceId: null,
-    });
-  },
-
-  // Replace the working project with the contents of an opened .spine file.
-  async loadProjectData(p) {
-    await repo.wipeAll();
-    await repo.bulkInsert(p);
-    await get().load();
-    set({
-      view: "graph",
-      selectedNodeId: null,
-      selectedEdgeId: null,
-      editingNodeId: null,
-      sourcesOpen: false,
-      focusedSourceId: null,
-    });
-  },
-
-  async setCurrentFile(name, path) {
-    await repo.setMeta("currentFileName", name);
-    await repo.setMeta("currentFilePath", path);
-    set({ currentFileName: name, currentFilePath: path });
-  },
-
-  setView(v) {
-    if (v === "linear") void get().ensureLinearOrder();
-    set({ view: v });
-  },
-
-  async addNode(typeId, x, y) {
-    const id = await repo.createNode(typeId, x, y);
-    const node: ArgNode = {
-      id,
-      type_id: typeId,
-      claim: "",
-      body: "",
-      strength: "unfinished",
-      attention: 0,
-      pos_x: x,
-      pos_y: y,
-    };
-    set((s) => ({ nodes: [...s.nodes, node], selectedNodeId: id, selectedEdgeId: null }));
-  },
-
-  async duplicateNode(id) {
-    const src = get().nodes.find((n) => n.id === id);
-    if (!src) return;
-    const fields = {
-      type_id: src.type_id,
-      claim: src.claim,
-      body: src.body,
-      strength: src.strength,
-      attention: src.attention,
-      pos_x: src.pos_x + 32,
-      pos_y: src.pos_y + 32,
-    };
-    const newId = await repo.createNodeFull(fields);
-    const srcSupports = get().supports.filter((s) => s.node_id === id);
-    const newSupports: Support[] = [];
-    for (const s of srcSupports) {
-      const sid = await repo.createSupport(newId, s.text, s.source_id, s.sort_order);
-      newSupports.push({
-        id: sid,
-        node_id: newId,
-        text: s.text,
-        source_id: s.source_id,
-        sort_order: s.sort_order,
+    async load() {
+      const [nodeTypes, nodes, edges, supports, sources, linearOrder, fileName, filePath] =
+        await Promise.all([
+          repo.listNodeTypes(),
+          repo.listNodes(),
+          repo.listEdges(),
+          repo.listAllSupports(),
+          repo.listSources(),
+          repo.getLinearOrder(),
+          repo.getMeta("currentFileName"),
+          repo.getMeta("currentFilePath"),
+        ]);
+      const nodeTypeById: Record<number, NodeType> = {};
+      for (const t of nodeTypes) nodeTypeById[t.id] = t;
+      set({
+        nodeTypes,
+        nodeTypeById,
+        nodes,
+        edges,
+        supports,
+        sources,
+        sourceById: indexSources(sources),
+        linearOrder,
+        currentFileName: fileName,
+        currentFilePath: filePath,
+        loaded: true,
       });
-    }
-    set((s) => ({
-      nodes: [...s.nodes, { id: newId, ...fields }],
-      supports: [...s.supports, ...newSupports],
-      selectedNodeId: newId,
-      selectedEdgeId: null,
-    }));
-  },
+    },
 
-  async setNodeClaim(id, claim) {
-    await repo.updateNodeClaim(id, claim);
-    set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, claim } : n)) }));
-  },
+    async newProject() {
+      await repo.wipeAll();
+      await repo.seedDefaultTypes();
+      await repo.setMeta("currentFileName", null);
+      await repo.setMeta("currentFilePath", null);
+      await get().load();
+      set({
+        view: "graph",
+        selectedNodeId: null,
+        selectedEdgeId: null,
+        selectedNodeIds: [],
+        selectedEdgeIds: [],
+        editingNodeId: null,
+        sourcesOpen: false,
+        focusedSourceId: null,
+      });
+    },
 
-  async setNodeBody(id, body) {
-    await repo.updateNodeBody(id, body);
-    set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, body } : n)) }));
-  },
+    async loadProjectData(p) {
+      await repo.wipeAll();
+      await repo.bulkInsert(p);
+      await get().load();
+      set({
+        view: "graph",
+        selectedNodeId: null,
+        selectedEdgeId: null,
+        selectedNodeIds: [],
+        selectedEdgeIds: [],
+        editingNodeId: null,
+        sourcesOpen: false,
+        focusedSourceId: null,
+      });
+    },
 
-  async setNodeType(id, typeId) {
-    await repo.updateNodeType(id, typeId);
-    set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, type_id: typeId } : n)) }));
-  },
+    async setCurrentFile(name, path) {
+      await repo.setMeta("currentFileName", name);
+      await repo.setMeta("currentFilePath", path);
+      set({ currentFileName: name, currentFilePath: path });
+    },
 
-  async setNodeStrength(id, strength) {
-    await repo.updateNodeStrength(id, strength);
-    set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, strength } : n)) }));
-  },
-
-  async setNodeAttention(id, attention) {
-    await repo.updateNodeAttention(id, attention);
-    set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, attention } : n)) }));
-  },
-
-  moveNodeLocal(id, x, y) {
-    set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, pos_x: x, pos_y: y } : n)) }));
-  },
-
-  async persistNodePosition(id) {
-    const n = get().nodes.find((m) => m.id === id);
-    if (n) await repo.updateNodePosition(id, n.pos_x, n.pos_y);
-  },
-
-  async removeNode(id) {
-    await repo.deleteNode(id);
-    set((s) => ({
-      nodes: s.nodes.filter((n) => n.id !== id),
-      edges: s.edges.filter((e) => e.from_id !== id && e.to_id !== id),
-      supports: s.supports.filter((x) => x.node_id !== id),
-      linearOrder: s.linearOrder.filter((x) => x !== id),
-      selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
-      editingNodeId: s.editingNodeId === id ? null : s.editingNodeId,
-    }));
-  },
-
-  async addEdge(fromId, toId) {
-    if (fromId === toId) return;
-    if (get().edges.some((e) => e.from_id === fromId && e.to_id === toId)) return;
-    const id = await repo.createEdge(fromId, toId);
-    set((s) => ({
-      edges: [...s.edges, { id, from_id: fromId, to_id: toId, kind: "conjunctive" }],
-    }));
-  },
-
-  async setEdgeKind(id, kind) {
-    await repo.updateEdgeKind(id, kind);
-    set((s) => ({ edges: s.edges.map((e) => (e.id === id ? { ...e, kind } : e)) }));
-  },
-
-  async removeEdge(id) {
-    await repo.deleteEdge(id);
-    set((s) => ({
-      edges: s.edges.filter((e) => e.id !== id),
-      selectedEdgeId: s.selectedEdgeId === id ? null : s.selectedEdgeId,
-    }));
-  },
-
-  async addSupport(nodeId) {
-    const order = get().supports.filter((s) => s.node_id === nodeId).length;
-    const id = await repo.createSupport(nodeId, "", null, order);
-    set((s) => ({
-      supports: [
-        ...s.supports,
-        { id, node_id: nodeId, text: "", source_id: null, sort_order: order },
-      ],
-    }));
-  },
-
-  async setSupportText(id, text) {
-    await repo.updateSupportText(id, text);
-    set((s) => ({ supports: s.supports.map((x) => (x.id === id ? { ...x, text } : x)) }));
-  },
-
-  async setSupportSource(id, sourceId) {
-    await repo.updateSupportSource(id, sourceId);
-    set((s) => ({ supports: s.supports.map((x) => (x.id === id ? { ...x, source_id: sourceId } : x)) }));
-  },
-
-  async removeSupport(id) {
-    await repo.deleteSupport(id);
-    set((s) => ({ supports: s.supports.filter((x) => x.id !== id) }));
-  },
-
-  async importBibtex(text) {
-    const entries = parseBibtex(text);
-    const existing = new Set(get().sources.map((s) => s.key));
-    let created = 0;
-    let updated = 0;
-    for (const e of entries) {
-      const src = entryToSource(e);
-      if (!src.key) continue;
-      if (existing.has(src.key)) updated++;
-      else {
-        created++;
-        existing.add(src.key);
+    async saveCurrent(forceDialog) {
+      const s = get();
+      const text = serializeProject({
+        nodeTypes: s.nodeTypes,
+        nodes: s.nodes,
+        edges: s.edges,
+        sources: s.sources,
+        supports: s.supports,
+        linearOrder: s.linearOrder,
+      });
+      const res = await saveProject(
+        text,
+        s.currentFileName ?? "untitled.spine.json",
+        s.currentFilePath,
+        forceDialog,
+      );
+      if (res) {
+        await get().setCurrentFile(res.name, res.path);
+        flash(`Saved ${res.name}`);
       }
-      await repo.upsertSource(src);
-    }
-    const sources = await repo.listSources();
-    set({ sources, sourceById: indexSources(sources) });
-    return { created, updated, total: entries.length };
-  },
+    },
 
-  async ensureLinearOrder() {
-    const { nodes, edges, linearOrder } = get();
-    const existing = new Set(nodes.map((n) => n.id));
-    const kept = linearOrder.filter((id) => existing.has(id));
-    const inKept = new Set(kept);
-    const missing = topoOrderIds(nodes, edges).filter((id) => !inKept.has(id));
-    const order = [...kept, ...missing];
-    set({ linearOrder: order });
-    await repo.replaceLinearOrder(order);
-  },
+    requestNewProject() {
+      set({ pendingFileAction: "new" });
+    },
 
-  async setLinearOrder(ids) {
-    set({ linearOrder: ids });
-    await repo.replaceLinearOrder(ids);
-  },
+    requestOpenProject() {
+      set({ pendingFileAction: "open" });
+    },
 
-  select(nodeId, edgeId) {
-    set({ selectedNodeId: nodeId, selectedEdgeId: edgeId });
-  },
+    async confirmFileAction() {
+      const kind = get().pendingFileAction;
+      set({ pendingFileAction: null });
+      if (kind === "new") {
+        await get().newProject();
+        flash("Started a new project");
+      } else if (kind === "open") {
+        const res = await openProject();
+        if (!res) return;
+        try {
+          const data = parseProject(res.text);
+          await get().loadProjectData(data);
+          await get().setCurrentFile(res.name, res.path);
+          flash(`Opened ${res.name}`);
+        } catch (e) {
+          flash(`Couldn't open: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    },
 
-  setEditing(id) {
-    set({ editingNodeId: id });
-  },
+    cancelFileAction() {
+      set({ pendingFileAction: null });
+    },
 
-  toggleSources() {
-    set((s) => ({
-      sourcesOpen: !s.sourcesOpen,
-      selectedNodeId: !s.sourcesOpen ? null : s.selectedNodeId, // opening: show the sources panel
-      focusedSourceId: s.sourcesOpen ? null : s.focusedSourceId, // closing: drop the highlight
-    }));
-  },
+    setView(v) {
+      if (v === "linear") void get().ensureLinearOrder();
+      set({ view: v });
+    },
 
-  focusSource(id) {
-    set((s) => ({ focusedSourceId: s.focusedSourceId === id ? null : id }));
-  },
-}));
+    async addNode(typeId, x, y) {
+      const id = await repo.createNode(typeId, x, y);
+      const node: ArgNode = {
+        id,
+        type_id: typeId,
+        claim: "",
+        body: "",
+        strength: "unfinished",
+        attention: 0,
+        pos_x: x,
+        pos_y: y,
+      };
+      set((s) => ({
+        nodes: [...s.nodes, node],
+        selectedNodeId: id,
+        selectedEdgeId: null,
+        selectedNodeIds: [id],
+        selectedEdgeIds: [],
+      }));
+    },
+
+    async duplicateNode(id) {
+      const src = get().nodes.find((n) => n.id === id);
+      if (!src) return;
+      const fields = {
+        type_id: src.type_id,
+        claim: src.claim,
+        body: src.body,
+        strength: src.strength,
+        attention: src.attention,
+        pos_x: src.pos_x + 32,
+        pos_y: src.pos_y + 32,
+      };
+      const newId = await repo.createNodeFull(fields);
+      const srcSupports = get().supports.filter((s) => s.node_id === id);
+      const newSupports: Support[] = [];
+      for (const s of srcSupports) {
+        const sid = await repo.createSupport(newId, s.text, s.source_id, s.sort_order);
+        newSupports.push({
+          id: sid,
+          node_id: newId,
+          text: s.text,
+          source_id: s.source_id,
+          sort_order: s.sort_order,
+        });
+      }
+      set((s) => ({
+        nodes: [...s.nodes, { id: newId, ...fields }],
+        supports: [...s.supports, ...newSupports],
+        selectedNodeId: newId,
+        selectedEdgeId: null,
+        selectedNodeIds: [newId],
+        selectedEdgeIds: [],
+      }));
+    },
+
+    async setNodeClaim(id, claim) {
+      await repo.updateNodeClaim(id, claim);
+      set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, claim } : n)) }));
+    },
+
+    async setNodeBody(id, body) {
+      await repo.updateNodeBody(id, body);
+      set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, body } : n)) }));
+    },
+
+    async setNodeType(id, typeId) {
+      await repo.updateNodeType(id, typeId);
+      set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, type_id: typeId } : n)) }));
+    },
+
+    async setNodeStrength(id, strength) {
+      await repo.updateNodeStrength(id, strength);
+      set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, strength } : n)) }));
+    },
+
+    async setNodeAttention(id, attention) {
+      await repo.updateNodeAttention(id, attention);
+      set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, attention } : n)) }));
+    },
+
+    moveNodeLocal(id, x, y) {
+      set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, pos_x: x, pos_y: y } : n)) }));
+    },
+
+    async persistNodePosition(id) {
+      const n = get().nodes.find((m) => m.id === id);
+      if (n) await repo.updateNodePosition(id, n.pos_x, n.pos_y);
+    },
+
+    async removeNode(id) {
+      await repo.deleteNode(id);
+      set((s) => ({
+        nodes: s.nodes.filter((n) => n.id !== id),
+        edges: s.edges.filter((e) => e.from_id !== id && e.to_id !== id),
+        supports: s.supports.filter((x) => x.node_id !== id),
+        linearOrder: s.linearOrder.filter((x) => x !== id),
+        selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
+        selectedNodeIds: s.selectedNodeIds.filter((x) => x !== id),
+        editingNodeId: s.editingNodeId === id ? null : s.editingNodeId,
+      }));
+    },
+
+    async addEdge(fromId, toId) {
+      if (fromId === toId) return;
+      if (get().edges.some((e) => e.from_id === fromId && e.to_id === toId)) return;
+      const id = await repo.createEdge(fromId, toId);
+      set((s) => ({
+        edges: [...s.edges, { id, from_id: fromId, to_id: toId, kind: "conjunctive" }],
+      }));
+    },
+
+    async setEdgeKind(id, kind) {
+      await repo.updateEdgeKind(id, kind);
+      set((s) => ({ edges: s.edges.map((e) => (e.id === id ? { ...e, kind } : e)) }));
+    },
+
+    async removeEdge(id) {
+      await repo.deleteEdge(id);
+      set((s) => ({
+        edges: s.edges.filter((e) => e.id !== id),
+        selectedEdgeId: s.selectedEdgeId === id ? null : s.selectedEdgeId,
+        selectedEdgeIds: s.selectedEdgeIds.filter((x) => x !== id),
+      }));
+    },
+
+    // Bulk-remove the current multi-selection (Delete key).
+    async removeSelected() {
+      const { selectedNodeIds, selectedEdgeIds } = get();
+      for (const id of selectedEdgeIds) await repo.deleteEdge(id);
+      for (const id of selectedNodeIds) await repo.deleteNode(id);
+      const delNodes = new Set(selectedNodeIds);
+      const delEdges = new Set(selectedEdgeIds);
+      set((s) => ({
+        nodes: s.nodes.filter((n) => !delNodes.has(n.id)),
+        edges: s.edges.filter(
+          (e) => !delNodes.has(e.from_id) && !delNodes.has(e.to_id) && !delEdges.has(e.id),
+        ),
+        supports: s.supports.filter((x) => !delNodes.has(x.node_id)),
+        linearOrder: s.linearOrder.filter((x) => !delNodes.has(x)),
+        selectedNodeId: null,
+        selectedEdgeId: null,
+        selectedNodeIds: [],
+        selectedEdgeIds: [],
+        editingNodeId:
+          s.editingNodeId != null && delNodes.has(s.editingNodeId) ? null : s.editingNodeId,
+      }));
+    },
+
+    async addSupport(nodeId) {
+      const order = get().supports.filter((s) => s.node_id === nodeId).length;
+      const id = await repo.createSupport(nodeId, "", null, order);
+      set((s) => ({
+        supports: [
+          ...s.supports,
+          { id, node_id: nodeId, text: "", source_id: null, sort_order: order },
+        ],
+      }));
+    },
+
+    async setSupportText(id, text) {
+      await repo.updateSupportText(id, text);
+      set((s) => ({ supports: s.supports.map((x) => (x.id === id ? { ...x, text } : x)) }));
+    },
+
+    async setSupportSource(id, sourceId) {
+      await repo.updateSupportSource(id, sourceId);
+      set((s) => ({
+        supports: s.supports.map((x) => (x.id === id ? { ...x, source_id: sourceId } : x)),
+      }));
+    },
+
+    async removeSupport(id) {
+      await repo.deleteSupport(id);
+      set((s) => ({ supports: s.supports.filter((x) => x.id !== id) }));
+    },
+
+    async importBibtex(text) {
+      const entries = parseBibtex(text);
+      const existing = new Set(get().sources.map((s) => s.key));
+      let created = 0;
+      let updated = 0;
+      for (const e of entries) {
+        const src = entryToSource(e);
+        if (!src.key) continue;
+        if (existing.has(src.key)) updated++;
+        else {
+          created++;
+          existing.add(src.key);
+        }
+        await repo.upsertSource(src);
+      }
+      const sources = await repo.listSources();
+      set({ sources, sourceById: indexSources(sources) });
+      return { created, updated, total: entries.length };
+    },
+
+    async ensureLinearOrder() {
+      const { nodes, edges, linearOrder } = get();
+      const existing = new Set(nodes.map((n) => n.id));
+      const kept = linearOrder.filter((id) => existing.has(id));
+      const inKept = new Set(kept);
+      const missing = topoOrderIds(nodes, edges).filter((id) => !inKept.has(id));
+      const order = [...kept, ...missing];
+      set({ linearOrder: order });
+      await repo.replaceLinearOrder(order);
+    },
+
+    async setLinearOrder(ids) {
+      set({ linearOrder: ids });
+      await repo.replaceLinearOrder(ids);
+    },
+
+    select(nodeId, edgeId) {
+      set({
+        selectedNodeId: nodeId,
+        selectedEdgeId: edgeId,
+        selectedNodeIds: nodeId != null ? [nodeId] : [],
+        selectedEdgeIds: edgeId != null ? [edgeId] : [],
+      });
+    },
+
+    setSelection(nodeIds, edgeIds) {
+      set({
+        selectedNodeIds: nodeIds,
+        selectedEdgeIds: edgeIds,
+        selectedNodeId: nodeIds.length === 1 ? nodeIds[0] : null,
+        selectedEdgeId: edgeIds.length === 1 && nodeIds.length === 0 ? edgeIds[0] : null,
+      });
+    },
+
+    setEditing(id) {
+      set({ editingNodeId: id });
+    },
+
+    toggleSources() {
+      set((s) => ({
+        sourcesOpen: !s.sourcesOpen,
+        selectedNodeId: !s.sourcesOpen ? null : s.selectedNodeId,
+        focusedSourceId: s.sourcesOpen ? null : s.focusedSourceId,
+      }));
+    },
+
+    focusSource(id) {
+      set((s) => ({ focusedSourceId: s.focusedSourceId === id ? null : id }));
+    },
+  };
+});
 
 // Dev-only handle for debugging and automated verification from the console.
 if (import.meta.env.DEV) {

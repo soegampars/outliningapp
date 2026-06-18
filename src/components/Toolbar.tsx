@@ -16,6 +16,7 @@ export function Toolbar() {
   const sourcesOpen = useSpine((s) => s.sourcesOpen);
   const toggleSources = useSpine((s) => s.toggleSources);
   const currentFileName = useSpine((s) => s.currentFileName);
+  const fileMessage = useSpine((s) => s.fileMessage);
   const { screenToFlowPosition } = useReactFlow();
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -92,7 +93,9 @@ export function Toolbar() {
           : "Reorder with ↑ ↓ · click a claim to open it in the graph"}
       </span>
       <span className="spine-toolbar__spacer" />
-      {msg && <span className="spine-toolbar__msg">{msg}</span>}
+      {(msg || fileMessage) && (
+        <span className="spine-toolbar__msg">{msg || fileMessage}</span>
+      )}
       <span className="spine-toolbar__count">
         {nodeCount} nodes · {edgeCount} edges · {sourceCount} sources
       </span>

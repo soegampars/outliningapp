@@ -6,6 +6,7 @@ import { Toolbar } from "./components/Toolbar";
 import { PeekPanel } from "./components/PeekPanel";
 import { SourcesPanel } from "./components/SourcesPanel";
 import { LinearView } from "./components/LinearView";
+import { ConfirmModal } from "./components/ConfirmModal";
 
 export default function App() {
   const load = useSpine((s) => s.load);
@@ -13,10 +14,65 @@ export default function App() {
   const view = useSpine((s) => s.view);
   const selectedNodeId = useSpine((s) => s.selectedNodeId);
   const sourcesOpen = useSpine((s) => s.sourcesOpen);
+  const pendingFileAction = useSpine((s) => s.pendingFileAction);
+  const confirmFileAction = useSpine((s) => s.confirmFileAction);
+  const cancelFileAction = useSpine((s) => s.cancelFileAction);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Global keyboard. File shortcuts work everywhere (even while typing); the
+  // canvas shortcuts are ignored while typing in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const inField =
+        !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      const st = useSpine.getState();
+      const mod = e.ctrlKey || e.metaKey;
+
+      if (mod && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        void st.saveCurrent(false);
+        return;
+      }
+      if (mod && (e.key === "o" || e.key === "O")) {
+        e.preventDefault();
+        st.requestOpenProject();
+        return;
+      }
+      if (mod && (e.key === "n" || e.key === "N")) {
+        e.preventDefault();
+        st.requestNewProject();
+        return;
+      }
+
+      if (inField) return;
+
+      if (mod && (e.key === "d" || e.key === "D")) {
+        if (st.view === "graph" && st.selectedNodeId != null) {
+          e.preventDefault();
+          void st.duplicateNode(st.selectedNodeId);
+        }
+        return;
+      }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (st.view === "graph" && (st.selectedNodeIds.length || st.selectedEdgeIds.length)) {
+          e.preventDefault();
+          void st.removeSelected();
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        if (st.pendingFileAction) st.cancelFileAction();
+        else if (st.editingNodeId != null) st.setEditing(null);
+        else st.setSelection([], []);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <ReactFlowProvider>
@@ -37,6 +93,20 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {pendingFileAction && (
+        <ConfirmModal
+          title={pendingFileAction === "new" ? "Start a new project?" : "Open a project?"}
+          body={
+            pendingFileAction === "new"
+              ? "The current canvas will be cleared. Unsaved changes will be lost — Save first if you want to keep them."
+              : "This replaces the project currently on the canvas. Unsaved changes will be lost."
+          }
+          okLabel={pendingFileAction === "new" ? "New project" : "Open…"}
+          onCancel={cancelFileAction}
+          onConfirm={() => void confirmFileAction()}
+        />
+      )}
     </ReactFlowProvider>
   );
 }

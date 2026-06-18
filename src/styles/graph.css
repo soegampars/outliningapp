@@ -468,6 +468,12 @@
   color: var(--canvas-bg);
 }
 
+/* Marquee multi-select box */
+.react-flow__selection {
+  background: rgba(91, 141, 239, 0.08);
+  border: 1px solid var(--support-citation);
+}
+
 /* Citation info line under a linked support (Zotero-style, §3). */
 .peek-cite {
   font-size: 11px;
