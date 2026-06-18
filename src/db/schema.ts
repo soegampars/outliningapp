@@ -13,6 +13,7 @@ export const DEFAULT_NODE_TYPES: { name: string; role: "structural" | "aside" }[
   { name: "QUESTION", role: "structural" },
   { name: "PROPOSAL", role: "structural" },
   { name: "OPEN GAP", role: "structural" },
+  { name: "GAP", role: "structural" },
   { name: "CAVEAT", role: "structural" },
 ];
 
@@ -41,6 +42,8 @@ export async function initSchema(db: Db): Promise<void> {
       attention  INTEGER NOT NULL DEFAULT 0,
       pos_x      REAL NOT NULL DEFAULT 0,
       pos_y      REAL NOT NULL DEFAULT 0,
+      parent_id  INTEGER REFERENCES node(id),
+      is_block   INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
@@ -86,6 +89,17 @@ export async function initSchema(db: Db): Promise<void> {
       key   TEXT PRIMARY KEY,
       value TEXT
     )`);
+
+  // Migrations for databases created before nested blocks (v2-B). SQLite has no
+  // "ADD COLUMN IF NOT EXISTS", so check the columns first.
+  const nodeCols = await db.select<{ name: string }>("PRAGMA table_info(node)");
+  const names = new Set(nodeCols.map((c) => c.name));
+  if (!names.has("parent_id")) {
+    await db.execute("ALTER TABLE node ADD COLUMN parent_id INTEGER");
+  }
+  if (!names.has("is_block")) {
+    await db.execute("ALTER TABLE node ADD COLUMN is_block INTEGER NOT NULL DEFAULT 0");
+  }
 
   const rows = await db.select<{ n: number }>(`SELECT COUNT(*) AS n FROM node_type`);
   if (Number(rows[0]?.n ?? 0) === 0) {

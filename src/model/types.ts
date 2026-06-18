@@ -25,6 +25,8 @@ export interface ArgNode {
   attention: number; // 0 | 1
   pos_x: number;
   pos_y: number;
+  parent_id: number | null; // the block this node lives inside; null = top level
+  is_block: number; // 0 | 1 — owns an internal sub-canvas (v2-B)
 }
 
 // A logical connection: from a supporting/child move -> the move it supports.

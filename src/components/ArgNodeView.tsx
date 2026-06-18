@@ -10,6 +10,7 @@ export interface ArgNodeData {
   typeId: number;
   attention: number;
   effective: Strength;
+  isBlock: boolean;
   [key: string]: unknown;
 }
 
@@ -45,8 +46,13 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
   };
   const cancel = () => setEditing(null);
 
+  const cls =
+    `spine-node strength-${d.effective}` +
+    (selected ? " selected" : "") +
+    (d.isBlock ? " spine-node--block" : "");
+
   return (
-    <div className={`spine-node strength-${d.effective}${selected ? " selected" : ""}`}>
+    <div className={cls}>
       <Handle type="target" position={Position.Top} />
 
       <div className="spine-node__head">
@@ -62,10 +68,15 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
             </option>
           ))}
         </select>
+        {d.isBlock ? (
+          <span className="spine-node__blockmark" title="Contains an internal chain — double-click to open">
+            ▸
+          </span>
+        ) : null}
         {d.attention ? <span className="spine-node__attention" title="Needs attention" /> : null}
       </div>
 
-      {editing ? (
+      {editing && !d.isBlock ? (
         <textarea
           ref={ref}
           className="spine-node__editor nodrag nowheel"
@@ -86,9 +97,9 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
       ) : (
         <div
           className={"spine-node__claim" + (d.claim ? "" : " spine-node__claim--empty")}
-          title="Double-click to edit"
+          title={d.isBlock ? "Double-click to open this block" : "Double-click to edit"}
         >
-          {d.claim || "Double-click to edit…"}
+          {d.claim || (d.isBlock ? "(empty block)" : "Double-click to edit…")}
         </div>
       )}
 

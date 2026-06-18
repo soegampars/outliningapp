@@ -20,16 +20,17 @@ interface SpineState {
   sources: Source[];
   sourceById: Record<number, Source>;
   linearOrder: number[];
-  selectedNodeId: number | null; // the single selected node (drives the inspector)
+  currentParentId: number | null; // which level the canvas shows (null = top, else a block)
+  selectedNodeId: number | null;
   selectedEdgeId: number | null;
-  selectedNodeIds: number[]; // full multi-selection (for bulk move/delete)
+  selectedNodeIds: number[];
   selectedEdgeIds: number[];
   editingNodeId: number | null;
   sourcesOpen: boolean;
   focusedSourceId: number | null;
   currentFileName: string | null;
   currentFilePath: string | null;
-  pendingFileAction: "new" | "open" | null; // a confirmation is awaiting the user
+  pendingFileAction: "new" | "open" | null;
   fileMessage: string;
 
   load: () => Promise<void>;
@@ -44,6 +45,9 @@ interface SpineState {
   setView: (v: ViewMode) => void;
   addNode: (typeId: number, x: number, y: number) => Promise<void>;
   duplicateNode: (id: number) => Promise<void>;
+  makeBlock: (id: number) => Promise<void>;
+  drillInto: (id: number) => void;
+  drillUp: () => void;
   setNodeClaim: (id: number, claim: string) => Promise<void>;
   setNodeBody: (id: number, body: string) => Promise<void>;
   setNodeType: (id: number, typeId: number) => Promise<void>;
@@ -76,6 +80,14 @@ function indexSources(sources: Source[]): Record<number, Source> {
   return byId;
 }
 
+const CLEARED_SELECTION = {
+  selectedNodeId: null,
+  selectedEdgeId: null,
+  selectedNodeIds: [] as number[],
+  selectedEdgeIds: [] as number[],
+  editingNodeId: null,
+};
+
 export const useSpine = create<SpineState>((set, get) => {
   const flash = (msg: string) => {
     set({ fileMessage: msg });
@@ -95,6 +107,7 @@ export const useSpine = create<SpineState>((set, get) => {
     sources: [],
     sourceById: {},
     linearOrder: [],
+    currentParentId: null,
     selectedNodeId: null,
     selectedEdgeId: null,
     selectedNodeIds: [],
@@ -130,6 +143,7 @@ export const useSpine = create<SpineState>((set, get) => {
         sources,
         sourceById: indexSources(sources),
         linearOrder,
+        currentParentId: null,
         currentFileName: fileName,
         currentFilePath: filePath,
         loaded: true,
@@ -142,32 +156,14 @@ export const useSpine = create<SpineState>((set, get) => {
       await repo.setMeta("currentFileName", null);
       await repo.setMeta("currentFilePath", null);
       await get().load();
-      set({
-        view: "graph",
-        selectedNodeId: null,
-        selectedEdgeId: null,
-        selectedNodeIds: [],
-        selectedEdgeIds: [],
-        editingNodeId: null,
-        sourcesOpen: false,
-        focusedSourceId: null,
-      });
+      set({ view: "graph", currentParentId: null, sourcesOpen: false, focusedSourceId: null, ...CLEARED_SELECTION });
     },
 
     async loadProjectData(p) {
       await repo.wipeAll();
       await repo.bulkInsert(p);
       await get().load();
-      set({
-        view: "graph",
-        selectedNodeId: null,
-        selectedEdgeId: null,
-        selectedNodeIds: [],
-        selectedEdgeIds: [],
-        editingNodeId: null,
-        sourcesOpen: false,
-        focusedSourceId: null,
-      });
+      set({ view: "graph", currentParentId: null, sourcesOpen: false, focusedSourceId: null, ...CLEARED_SELECTION });
     },
 
     async setCurrentFile(name, path) {
@@ -236,7 +232,8 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async addNode(typeId, x, y) {
-      const id = await repo.createNode(typeId, x, y);
+      const parentId = get().currentParentId;
+      const id = await repo.createNode(typeId, x, y, "", parentId);
       const node: ArgNode = {
         id,
         type_id: typeId,
@@ -246,6 +243,8 @@ export const useSpine = create<SpineState>((set, get) => {
         attention: 0,
         pos_x: x,
         pos_y: y,
+        parent_id: parentId,
+        is_block: 0,
       };
       set((s) => ({
         nodes: [...s.nodes, node],
@@ -267,6 +266,8 @@ export const useSpine = create<SpineState>((set, get) => {
         attention: src.attention,
         pos_x: src.pos_x + 32,
         pos_y: src.pos_y + 32,
+        parent_id: src.parent_id,
+        is_block: 0,
       };
       const newId = await repo.createNodeFull(fields);
       const srcSupports = get().supports.filter((s) => s.node_id === id);
@@ -289,6 +290,42 @@ export const useSpine = create<SpineState>((set, get) => {
         selectedNodeIds: [newId],
         selectedEdgeIds: [],
       }));
+    },
+
+    // Turn a top-level node into a block and drill into its (seeded) sub-canvas.
+    async makeBlock(id) {
+      const node = get().nodes.find((n) => n.id === id);
+      if (!node || node.parent_id != null || node.is_block) return; // depth-2 cap
+      const outId = await repo.makeBlock(node);
+      const out: ArgNode = {
+        id: outId,
+        type_id: node.type_id,
+        claim: node.claim,
+        body: node.body,
+        strength: node.strength,
+        attention: 0,
+        pos_x: 240,
+        pos_y: 160,
+        parent_id: id,
+        is_block: 0,
+      };
+      set((s) => ({
+        nodes: s.nodes.map((n) => (n.id === id ? { ...n, is_block: 1 } : n)).concat(out),
+        currentParentId: id,
+        ...CLEARED_SELECTION,
+        selectedNodeId: outId,
+        selectedNodeIds: [outId],
+      }));
+    },
+
+    drillInto(id) {
+      set({ currentParentId: id, ...CLEARED_SELECTION });
+    },
+
+    drillUp() {
+      const cur = get().currentParentId;
+      const block = cur != null ? get().nodes.find((n) => n.id === cur) : null;
+      set({ currentParentId: block?.parent_id ?? null, ...CLEARED_SELECTION });
     },
 
     async setNodeClaim(id, claim) {
@@ -327,15 +364,19 @@ export const useSpine = create<SpineState>((set, get) => {
 
     async removeNode(id) {
       await repo.deleteNode(id);
-      set((s) => ({
-        nodes: s.nodes.filter((n) => n.id !== id),
-        edges: s.edges.filter((e) => e.from_id !== id && e.to_id !== id),
-        supports: s.supports.filter((x) => x.node_id !== id),
-        linearOrder: s.linearOrder.filter((x) => x !== id),
-        selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
-        selectedNodeIds: s.selectedNodeIds.filter((x) => x !== id),
-        editingNodeId: s.editingNodeId === id ? null : s.editingNodeId,
-      }));
+      set((s) => {
+        const del = new Set<number>([id]);
+        for (const n of s.nodes) if (n.parent_id === id) del.add(n.id);
+        return {
+          nodes: s.nodes.filter((n) => !del.has(n.id)),
+          edges: s.edges.filter((e) => !del.has(e.from_id) && !del.has(e.to_id)),
+          supports: s.supports.filter((x) => !del.has(x.node_id)),
+          linearOrder: s.linearOrder.filter((x) => !del.has(x)),
+          selectedNodeId: s.selectedNodeId != null && del.has(s.selectedNodeId) ? null : s.selectedNodeId,
+          selectedNodeIds: s.selectedNodeIds.filter((x) => !del.has(x)),
+          editingNodeId: s.editingNodeId != null && del.has(s.editingNodeId) ? null : s.editingNodeId,
+        };
+      });
     },
 
     async addEdge(fromId, toId) {
@@ -361,26 +402,26 @@ export const useSpine = create<SpineState>((set, get) => {
       }));
     },
 
-    // Bulk-remove the current multi-selection (Delete key).
     async removeSelected() {
-      const { selectedNodeIds, selectedEdgeIds } = get();
+      const { selectedNodeIds, selectedEdgeIds, nodes } = get();
       for (const id of selectedEdgeIds) await repo.deleteEdge(id);
       for (const id of selectedNodeIds) await repo.deleteNode(id);
-      const delNodes = new Set(selectedNodeIds);
+      const del = new Set<number>();
+      for (const id of selectedNodeIds) {
+        del.add(id);
+        for (const n of nodes) if (n.parent_id === id) del.add(n.id);
+      }
       const delEdges = new Set(selectedEdgeIds);
       set((s) => ({
-        nodes: s.nodes.filter((n) => !delNodes.has(n.id)),
+        nodes: s.nodes.filter((n) => !del.has(n.id)),
         edges: s.edges.filter(
-          (e) => !delNodes.has(e.from_id) && !delNodes.has(e.to_id) && !delEdges.has(e.id),
+          (e) => !del.has(e.from_id) && !del.has(e.to_id) && !delEdges.has(e.id),
         ),
-        supports: s.supports.filter((x) => !delNodes.has(x.node_id)),
-        linearOrder: s.linearOrder.filter((x) => !delNodes.has(x)),
-        selectedNodeId: null,
-        selectedEdgeId: null,
-        selectedNodeIds: [],
-        selectedEdgeIds: [],
+        supports: s.supports.filter((x) => !del.has(x.node_id)),
+        linearOrder: s.linearOrder.filter((x) => !del.has(x)),
+        ...CLEARED_SELECTION,
         editingNodeId:
-          s.editingNodeId != null && delNodes.has(s.editingNodeId) ? null : s.editingNodeId,
+          s.editingNodeId != null && del.has(s.editingNodeId) ? null : s.editingNodeId,
       }));
     },
 
@@ -433,11 +474,14 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async ensureLinearOrder() {
-      const { nodes, edges, linearOrder } = get();
-      const existing = new Set(nodes.map((n) => n.id));
+      const { nodes, edges, linearOrder, currentParentId } = get();
+      const levelNodes = nodes.filter((n) => (n.parent_id ?? null) === currentParentId);
+      const levelIds = new Set(levelNodes.map((n) => n.id));
+      const existing = new Set(levelNodes.map((n) => n.id));
       const kept = linearOrder.filter((id) => existing.has(id));
       const inKept = new Set(kept);
-      const missing = topoOrderIds(nodes, edges).filter((id) => !inKept.has(id));
+      const levelEdges = edges.filter((e) => levelIds.has(e.from_id) && levelIds.has(e.to_id));
+      const missing = topoOrderIds(levelNodes, levelEdges).filter((id) => !inKept.has(id));
       const order = [...kept, ...missing];
       set({ linearOrder: order });
       await repo.replaceLinearOrder(order);

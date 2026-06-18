@@ -28,6 +28,8 @@ export function PeekPanel() {
   const setSupportSource = useSpine((s) => s.setSupportSource);
   const removeSupport = useSpine((s) => s.removeSupport);
   const select = useSpine((s) => s.select);
+  const makeBlock = useSpine((s) => s.makeBlock);
+  const drillInto = useSpine((s) => s.drillInto);
 
   const [claim, setClaim] = useState("");
   const [body, setBody] = useState("");
@@ -82,6 +84,25 @@ export function PeekPanel() {
           ×
         </button>
       </div>
+
+      {node.parent_id == null && (
+        <div className="peek-section">
+          {node.is_block ? (
+            <>
+              <button className="peek-blockbtn" onClick={() => drillInto(nid)}>
+                Open block ▸
+              </button>
+              <span className="peek-blocknote">
+                The claim shown on the canvas mirrors this block's output node.
+              </span>
+            </>
+          ) : (
+            <button className="peek-blockbtn" onClick={() => void makeBlock(nid)}>
+              Build internal structure ▸
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="peek-section">
         <label className="peek-section__label">Claim</label>

@@ -19,7 +19,7 @@ export async function listNodeTypes(): Promise<NodeType[]> {
 export async function listNodes(): Promise<ArgNode[]> {
   const db = await conn();
   return db.select<ArgNode>(
-    "SELECT id, type_id, claim, body, strength, attention, pos_x, pos_y FROM node",
+    "SELECT id, type_id, claim, body, strength, attention, pos_x, pos_y, parent_id, is_block FROM node",
   );
 }
 
@@ -33,11 +33,12 @@ export async function createNode(
   x: number,
   y: number,
   claim = "",
+  parentId: number | null = null,
 ): Promise<number> {
   const db = await conn();
   const r = await db.execute(
-    "INSERT INTO node (type_id, claim, pos_x, pos_y) VALUES ($1, $2, $3, $4)",
-    [typeId, claim, x, y],
+    "INSERT INTO node (type_id, claim, pos_x, pos_y, parent_id) VALUES ($1, $2, $3, $4, $5)",
+    [typeId, claim, x, y, parentId],
   );
   return Number(r.lastInsertId);
 }
@@ -87,9 +88,12 @@ export async function updateNodePosition(id: number, x: number, y: number): Prom
   await db.execute("UPDATE node SET pos_x = $1, pos_y = $2 WHERE id = $3", [x, y, id]);
 }
 
-// Manual cascade (FK enforcement is unreliable across pooled connections).
+// Manual cascade (FK enforcement is unreliable across pooled connections). Also
+// removes any internal children if the node is a block.
 export async function deleteNode(id: number): Promise<void> {
   const db = await conn();
+  const kids = await db.select<{ id: number }>("SELECT id FROM node WHERE parent_id = $1", [id]);
+  for (const k of kids) await deleteNode(k.id);
   await db.execute("DELETE FROM support WHERE node_id = $1", [id]);
   await db.execute("DELETE FROM edge WHERE from_id = $1 OR to_id = $1", [id]);
   await db.execute("DELETE FROM linear_order WHERE node_id = $1", [id]);
@@ -194,7 +198,7 @@ export async function listSources(): Promise<Source[]> {
   );
 }
 
-// Insert a node with all fields set (used by duplicate).
+// Insert a node with all fields set (used by duplicate, makeBlock, import).
 export async function createNodeFull(n: {
   type_id: number;
   claim: string;
@@ -203,13 +207,35 @@ export async function createNodeFull(n: {
   attention: number;
   pos_x: number;
   pos_y: number;
+  parent_id: number | null;
+  is_block: number;
 }): Promise<number> {
   const db = await conn();
   const r = await db.execute(
-    "INSERT INTO node (type_id, claim, body, strength, attention, pos_x, pos_y) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-    [n.type_id, n.claim, n.body, n.strength, n.attention, n.pos_x, n.pos_y],
+    "INSERT INTO node (type_id, claim, body, strength, attention, pos_x, pos_y, parent_id, is_block) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+    [n.type_id, n.claim, n.body, n.strength, n.attention, n.pos_x, n.pos_y, n.parent_id, n.is_block],
   );
   return Number(r.lastInsertId);
+}
+
+// Turn a (top-level) node into a block: flag it and seed an internal output node
+// carrying the block's current claim. Returns the output node id.
+export async function makeBlock(node: ArgNode): Promise<number> {
+  const db = await conn();
+  await db.execute("UPDATE node SET is_block = 1, updated_at = datetime('now') WHERE id = $1", [
+    node.id,
+  ]);
+  return createNodeFull({
+    type_id: node.type_id,
+    claim: node.claim,
+    body: node.body,
+    strength: node.strength,
+    attention: 0,
+    pos_x: 240,
+    pos_y: 160,
+    parent_id: node.id,
+    is_block: 0,
+  });
 }
 
 // Import-only, refresh-by-stable-key (concept §3, §6.5): match on citekey and
@@ -239,7 +265,6 @@ export async function upsertSource(s: {
 
 // --- Project files: wipe / seed / bulk insert, and app metadata (Save/Open) ---
 
-// The whole model as a portable bundle (serialised to a .spine.json file).
 export interface ProjectData {
   nodeTypes: NodeType[];
   nodes: ArgNode[];
@@ -270,9 +295,6 @@ export async function seedDefaultTypes(): Promise<void> {
   }
 }
 
-// Insert a full project with explicit ids (parents before children). FK
-// enforcement is off, but parent-first keeps it tidy; AUTOINCREMENT sequences
-// advance to the inserted maxima, so later inserts won't collide.
 export async function bulkInsert(p: ProjectData): Promise<void> {
   const db = await conn();
   for (const t of p.nodeTypes) {
@@ -289,8 +311,19 @@ export async function bulkInsert(p: ProjectData): Promise<void> {
   }
   for (const n of p.nodes) {
     await db.execute(
-      "INSERT INTO node (id, type_id, claim, body, strength, attention, pos_x, pos_y) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-      [n.id, n.type_id, n.claim, n.body, n.strength, n.attention, n.pos_x, n.pos_y],
+      "INSERT INTO node (id, type_id, claim, body, strength, attention, pos_x, pos_y, parent_id, is_block) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      [
+        n.id,
+        n.type_id,
+        n.claim,
+        n.body,
+        n.strength,
+        n.attention,
+        n.pos_x,
+        n.pos_y,
+        n.parent_id ?? null,
+        n.is_block ?? 0,
+      ],
     );
   }
   for (const e of p.edges) {

@@ -14,6 +14,7 @@ import {
 } from "@xyflow/react";
 import { useSpine } from "../state/store";
 import { computeEffectiveStrength } from "../model/strength";
+import { blockOutput } from "../model/blocks";
 import { ArgNodeView } from "./ArgNodeView";
 
 const nodeTypes = { arg: ArgNodeView };
@@ -23,6 +24,7 @@ export function GraphCanvas() {
   const edges = useSpine((s) => s.edges);
   const supports = useSpine((s) => s.supports);
   const allTypes = useSpine((s) => s.nodeTypes);
+  const currentParentId = useSpine((s) => s.currentParentId);
   const selectedNodeIds = useSpine((s) => s.selectedNodeIds);
   const selectedEdgeIds = useSpine((s) => s.selectedEdgeIds);
   const focusedSourceId = useSpine((s) => s.focusedSourceId);
@@ -32,10 +34,25 @@ export function GraphCanvas() {
   const addNode = useSpine((s) => s.addNode);
   const setSelection = useSpine((s) => s.setSelection);
   const setEditing = useSpine((s) => s.setEditing);
+  const drillInto = useSpine((s) => s.drillInto);
 
   const { screenToFlowPosition } = useReactFlow();
 
-  const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
+  // Only the current level is shown; edges whose endpoints are both at this level.
+  const visibleNodes = useMemo(
+    () => nodes.filter((n) => (n.parent_id ?? null) === currentParentId),
+    [nodes, currentParentId],
+  );
+  const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
+  const visibleEdges = useMemo(
+    () => edges.filter((e) => visibleNodeIds.has(e.from_id) && visibleNodeIds.has(e.to_id)),
+    [edges, visibleNodeIds],
+  );
+
+  const effectiveById = useMemo(
+    () => computeEffectiveStrength(visibleNodes, visibleEdges),
+    [visibleNodes, visibleEdges],
+  );
 
   const footprint = useMemo(() => {
     const set = new Set<number>();
@@ -50,25 +67,30 @@ export function GraphCanvas() {
 
   const rfNodes = useMemo<RFNode[]>(
     () =>
-      nodes.map((n) => ({
-        id: String(n.id),
-        type: "arg",
-        position: { x: n.pos_x, y: n.pos_y },
-        selected: selectedNodeSet.has(n.id),
-        className: footprint.has(n.id) ? "footprint" : undefined,
-        data: {
-          claim: n.claim,
-          typeId: n.type_id,
-          attention: n.attention,
-          effective: effectiveById[n.id] ?? n.strength,
-        },
-      })),
-    [nodes, selectedNodeSet, effectiveById, footprint],
+      visibleNodes.map((n) => {
+        const isBlock = !!n.is_block;
+        const output = isBlock ? blockOutput(n.id, nodes, edges) : null;
+        return {
+          id: String(n.id),
+          type: "arg",
+          position: { x: n.pos_x, y: n.pos_y },
+          selected: selectedNodeSet.has(n.id),
+          className: footprint.has(n.id) ? "footprint" : undefined,
+          data: {
+            claim: isBlock ? (output?.claim ?? n.claim) : n.claim,
+            typeId: n.type_id,
+            attention: n.attention,
+            effective: effectiveById[n.id] ?? n.strength,
+            isBlock,
+          },
+        };
+      }),
+    [visibleNodes, nodes, edges, selectedNodeSet, effectiveById, footprint],
   );
 
   const rfEdges = useMemo<RFEdge[]>(
     () =>
-      edges.map((e) => ({
+      visibleEdges.map((e) => ({
         id: String(e.id),
         source: String(e.from_id),
         target: String(e.to_id),
@@ -76,11 +98,9 @@ export function GraphCanvas() {
         markerEnd: { type: MarkerType.ArrowClosed },
         style: e.kind === "disjunctive" ? { strokeDasharray: "7 5" } : undefined,
       })),
-    [edges, selectedEdgeSet],
+    [visibleEdges, selectedEdgeSet],
   );
 
-  // Apply position live during drag (moves the whole selection together); persist
-  // each node when its drag ends (dragging === false).
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       for (const c of changes) {
@@ -112,9 +132,14 @@ export function GraphCanvas() {
     [addEdge],
   );
 
+  // Double-click a block opens its sub-canvas; a normal node edits its claim.
   const onNodeDoubleClick = useCallback(
-    (_e: ReactMouseEvent, node: RFNode) => setEditing(Number(node.id)),
-    [setEditing],
+    (_e: ReactMouseEvent, node: RFNode) => {
+      const n = useSpine.getState().nodes.find((x) => x.id === Number(node.id));
+      if (n?.is_block) drillInto(n.id);
+      else setEditing(Number(node.id));
+    },
+    [drillInto, setEditing],
   );
 
   const onEdgeDoubleClick = useCallback((_e: ReactMouseEvent, edge: RFEdge) => {
@@ -165,7 +190,7 @@ export function GraphCanvas() {
         <Controls showInteractive={false} />
       </ReactFlow>
 
-      {nodes.length === 0 && (
+      {visibleNodes.length === 0 && (
         <div
           style={{
             position: "absolute",
@@ -178,7 +203,8 @@ export function GraphCanvas() {
             fontSize: 14,
           }}
         >
-          Double-click anywhere to add your first argument move.
+          Double-click anywhere to add{" "}
+          {currentParentId == null ? "your first argument move." : "a step inside this block."}
         </div>
       )}
     </div>

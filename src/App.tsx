@@ -7,6 +7,7 @@ import { PeekPanel } from "./components/PeekPanel";
 import { SourcesPanel } from "./components/SourcesPanel";
 import { LinearView } from "./components/LinearView";
 import { ConfirmModal } from "./components/ConfirmModal";
+import { Breadcrumb } from "./components/Breadcrumb";
 
 export default function App() {
   const load = useSpine((s) => s.load);
@@ -22,8 +23,6 @@ export default function App() {
     void load();
   }, [load]);
 
-  // Global keyboard. File shortcuts work everywhere (even while typing); the
-  // canvas shortcuts are ignored while typing in a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -67,6 +66,7 @@ export default function App() {
       if (e.key === "Escape") {
         if (st.pendingFileAction) st.cancelFileAction();
         else if (st.editingNodeId != null) st.setEditing(null);
+        else if (st.view === "graph" && st.currentParentId != null) st.drillUp();
         else st.setSelection([], []);
       }
     };
@@ -85,8 +85,11 @@ export default function App() {
             <LinearView />
           ) : (
             <>
-              <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
-                <GraphCanvas />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+                <Breadcrumb />
+                <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+                  <GraphCanvas />
+                </div>
               </div>
               {selectedNodeId != null ? <PeekPanel /> : sourcesOpen ? <SourcesPanel /> : null}
             </>

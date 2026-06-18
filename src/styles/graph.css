@@ -474,6 +474,85 @@
   border: 1px solid var(--support-citation);
 }
 
+/* Block node — owns an internal chain (v2-B). Layered card affordance. */
+.spine-node--block {
+  box-shadow:
+    5px 5px 0 -1px var(--canvas-bg),
+    5px 5px 0 0 var(--edge-default),
+    0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.spine-node__blockmark {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Breadcrumb (inside a block) */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: var(--panel-surface);
+  border-bottom: 1px solid var(--edge-default);
+  font-size: 13px;
+}
+.breadcrumb__crumb {
+  background: none;
+  border: none;
+  color: var(--support-citation);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+}
+.breadcrumb__crumb:hover {
+  text-decoration: underline;
+}
+.breadcrumb__sep {
+  color: var(--text-secondary);
+}
+.breadcrumb__current {
+  color: var(--text-primary);
+  font-weight: 600;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.breadcrumb__up {
+  margin-left: auto;
+  background: var(--node-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--edge-default);
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.breadcrumb__up:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+/* Inspector block control */
+.peek-blockbtn {
+  width: 100%;
+  background: var(--node-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--edge-default);
+  border-radius: 6px;
+  padding: 7px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.peek-blockbtn:hover {
+  border-color: var(--support-citation);
+}
+.peek-blocknote {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 /* Citation info line under a linked support (Zotero-style, §3). */
 .peek-cite {
   font-size: 11px;
