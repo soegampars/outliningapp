@@ -304,6 +304,105 @@
   color: var(--strength-weak) !important;
 }
 
+.spine-btn.active {
+  border-color: var(--support-citation);
+  color: var(--text-primary);
+}
+
+/* Sources / provenance panel */
+.peek-panel__title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+.peek-head__spacer {
+  flex: 1;
+}
+.src-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  background: var(--node-surface);
+  border: 1px solid var(--edge-default);
+  border-radius: 6px;
+  padding: 7px 9px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.src-row:hover {
+  border-color: var(--text-secondary);
+}
+.src-row.focused {
+  border-color: var(--support-citation);
+  box-shadow: 0 0 0 1px var(--support-citation);
+}
+.src-row__top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.src-row__key {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--support-citation);
+}
+.src-row__count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.src-row__meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.src-row__loadbar {
+  height: 4px;
+  background: var(--edge-default);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.src-row__fill {
+  display: block;
+  height: 100%;
+  background: var(--support-citation);
+}
+.spof-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: var(--node-surface);
+  border: 1px solid var(--edge-default);
+  border-left: 3px solid var(--strength-weak);
+  border-radius: 6px;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+.spof-row:hover {
+  border-color: var(--text-secondary);
+}
+.spof-row__node {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.spof-row__src {
+  font-size: 11px;
+  color: var(--strength-weak);
+}
+
+/* Footprint highlight on the canvas (§6.4) */
+.react-flow__node.footprint .spine-node {
+  box-shadow:
+    0 0 0 2px var(--support-citation),
+    0 0 16px rgba(91, 141, 239, 0.5);
+}
+
 /* Citation info line under a linked support (Zotero-style, §3). */
 .peek-cite {
   font-size: 11px;

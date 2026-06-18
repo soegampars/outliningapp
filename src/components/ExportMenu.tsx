@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useSpine } from "../state/store";
-import * as repo from "../data/repo";
 import { computeEffectiveStrength } from "../model/strength";
 import { buildExport, type ExportScope } from "../lib/export";
 
@@ -12,11 +11,12 @@ export function ExportMenu() {
   const nodes = useSpine((s) => s.nodes);
   const edges = useSpine((s) => s.edges);
   const nodeTypeById = useSpine((s) => s.nodeTypeById);
+  const allSupports = useSpine((s) => s.supports);
   const sources = useSpine((s) => s.sources);
   const linearOrder = useSpine((s) => s.linearOrder);
 
-  const gather = async (scope: ExportScope) => {
-    const supports = scope === "complete" ? await repo.listAllSupports() : [];
+  const gather = (scope: ExportScope) => {
+    const supports = scope === "complete" ? allSupports : [];
     const effectiveById = computeEffectiveStrength(nodes, edges);
     const md = buildExport(
       scope,
@@ -34,13 +34,12 @@ export function ExportMenu() {
   };
 
   const onCopy = async (scope: ExportScope) => {
-    await navigator.clipboard.writeText(await gather(scope));
+    await navigator.clipboard.writeText(gather(scope));
     flash(`Copied ${scope} export to clipboard`);
   };
 
-  const onDownload = async (scope: ExportScope) => {
-    const md = await gather(scope);
-    const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
+  const onDownload = (scope: ExportScope) => {
+    const url = URL.createObjectURL(new Blob([gather(scope)], { type: "text/markdown" }));
     const a = document.createElement("a");
     a.href = url;
     a.download = `spine-${scope}.md`;
@@ -64,7 +63,7 @@ export function ExportMenu() {
                   {scope === "complete" ? "Complete (lossless)" : "Skeleton only"}
                 </div>
                 <button onClick={() => void onCopy(scope)}>Copy</button>
-                <button onClick={() => void onDownload(scope)}>Download .md</button>
+                <button onClick={() => onDownload(scope)}>Download .md</button>
               </div>
             ))}
           </div>

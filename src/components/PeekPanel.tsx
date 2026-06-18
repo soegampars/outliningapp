@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSpine } from "../state/store";
-import * as repo from "../data/repo";
-import type { Support } from "../model/types";
 import { STRENGTHS } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
 import { shortLabel } from "../lib/bibtex";
@@ -16,6 +14,7 @@ export function PeekPanel() {
   const nodeTypeById = useSpine((s) => s.nodeTypeById);
   const nodes = useSpine((s) => s.nodes);
   const edges = useSpine((s) => s.edges);
+  const allSupports = useSpine((s) => s.supports);
   const sources = useSpine((s) => s.sources);
   const sourceById = useSpine((s) => s.sourceById);
   const setNodeClaim = useSpine((s) => s.setNodeClaim);
@@ -24,21 +23,21 @@ export function PeekPanel() {
   const setNodeStrength = useSpine((s) => s.setNodeStrength);
   const setNodeAttention = useSpine((s) => s.setNodeAttention);
   const setEdgeKind = useSpine((s) => s.setEdgeKind);
+  const addSupport = useSpine((s) => s.addSupport);
+  const setSupportText = useSpine((s) => s.setSupportText);
+  const setSupportSource = useSpine((s) => s.setSupportSource);
+  const removeSupport = useSpine((s) => s.removeSupport);
   const select = useSpine((s) => s.select);
 
   const [claim, setClaim] = useState("");
   const [body, setBody] = useState("");
-  const [supports, setSupports] = useState<Support[]>([]);
 
   const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
+  const supports = useMemo(
+    () => allSupports.filter((s) => s.node_id === selectedNodeId),
+    [allSupports, selectedNodeId],
+  );
 
-  useEffect(() => {
-    if (selectedNodeId == null) return;
-    void repo.listSupportsForNode(selectedNodeId).then(setSupports);
-  }, [selectedNodeId]);
-
-  // Keep claim/body drafts in sync with the selected node (store only changes on
-  // commit, so this never clobbers in-progress typing).
   useEffect(() => {
     setClaim(node?.claim ?? "");
     setBody(node?.body ?? "");
@@ -55,28 +54,6 @@ export function PeekPanel() {
     const n = nodeById(id);
     return n ? (nodeTypeById[n.type_id]?.name ?? "") : "";
   };
-
-  const addSupport = async () => {
-    const id = await repo.createSupport(nid, "", null, supports.length);
-    setSupports((prev) => [
-      ...prev,
-      { id, node_id: nid, text: "", source_id: null, sort_order: prev.length },
-    ]);
-  };
-  const commitSupportText = async (s: Support, text: string) => {
-    if (text === s.text) return;
-    await repo.updateSupportText(s.id, text);
-    setSupports((prev) => prev.map((x) => (x.id === s.id ? { ...x, text } : x)));
-  };
-  const setSupportSource = async (s: Support, sourceId: number | null) => {
-    await repo.updateSupportSource(s.id, sourceId);
-    setSupports((prev) => prev.map((x) => (x.id === s.id ? { ...x, source_id: sourceId } : x)));
-  };
-  const removeSupport = async (s: Support) => {
-    await repo.deleteSupport(s.id);
-    setSupports((prev) => prev.filter((x) => x.id !== s.id));
-  };
-
   const kindLabel = (kind: string) => (kind === "disjunctive" ? "any-of" : "all-of");
 
   return (
@@ -164,7 +141,7 @@ export function PeekPanel() {
                   value={s.source_id ?? ""}
                   title="Attach a source (citation) or leave as your own reasoning"
                   onChange={(e) =>
-                    void setSupportSource(s, e.target.value === "" ? null : Number(e.target.value))
+                    void setSupportSource(s.id, e.target.value === "" ? null : Number(e.target.value))
                   }
                 >
                   <option value="">Own reasoning</option>
@@ -177,7 +154,7 @@ export function PeekPanel() {
                 <button
                   className="peek-del"
                   title="Remove support"
-                  onClick={() => void removeSupport(s)}
+                  onClick={() => void removeSupport(s.id)}
                 >
                   ✕
                 </button>
@@ -190,9 +167,12 @@ export function PeekPanel() {
                 </div>
               )}
               <textarea
+                key={`txt-${s.id}`}
                 defaultValue={s.text}
                 placeholder="Paraphrase, quote, or your own gloss"
-                onBlur={(e) => void commitSupportText(s, e.target.value)}
+                onBlur={(e) => {
+                  if (e.target.value !== s.text) void setSupportText(s.id, e.target.value);
+                }}
               />
             </div>
           );
@@ -203,7 +183,7 @@ export function PeekPanel() {
             then.
           </span>
         )}
-        <button className="peek-btn-add" onClick={() => void addSupport()}>
+        <button className="peek-btn-add" onClick={() => void addSupport(nid)}>
           + Add support
         </button>
       </div>

@@ -21,23 +21,20 @@ const nodeTypes = { arg: ArgNodeView };
 export function GraphCanvas() {
   const nodes = useSpine((s) => s.nodes);
   const edges = useSpine((s) => s.edges);
+  const supports = useSpine((s) => s.supports);
   const allTypes = useSpine((s) => s.nodeTypes);
   const selectedNodeId = useSpine((s) => s.selectedNodeId);
   const selectedEdgeId = useSpine((s) => s.selectedEdgeId);
+  const focusedSourceId = useSpine((s) => s.focusedSourceId);
   const moveNodeLocal = useSpine((s) => s.moveNodeLocal);
   const persistNodePosition = useSpine((s) => s.persistNodePosition);
   const addEdge = useSpine((s) => s.addEdge);
   const addNode = useSpine((s) => s.addNode);
-  const setEdgeKind = useSpine((s) => s.setEdgeKind);
   const select = useSpine((s) => s.select);
   const setEditing = useSpine((s) => s.setEditing);
 
   const { screenToFlowPosition } = useReactFlow();
 
-  // We own the keyboard: RF's built-in delete keys off its internal selection,
-  // which doesn't track our controlled selection reliably. Handling it here
-  // deletes whichever element (edge takes priority, else node) is selected, and
-  // Ctrl/Cmd+D duplicates the selected node. All ignored while typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -69,8 +66,16 @@ export function GraphCanvas() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Effective (propagated) strength drives the node accent colour (§3, §5).
   const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
+
+  // Footprint: nodes citing the focused source (§6.4 highlight).
+  const footprint = useMemo(() => {
+    const set = new Set<number>();
+    if (focusedSourceId != null) {
+      for (const s of supports) if (s.source_id === focusedSourceId) set.add(s.node_id);
+    }
+    return set;
+  }, [supports, focusedSourceId]);
 
   const rfNodes = useMemo<RFNode[]>(
     () =>
@@ -79,6 +84,7 @@ export function GraphCanvas() {
         type: "arg",
         position: { x: n.pos_x, y: n.pos_y },
         selected: n.id === selectedNodeId,
+        className: footprint.has(n.id) ? "footprint" : undefined,
         data: {
           claim: n.claim,
           typeId: n.type_id,
@@ -86,7 +92,7 @@ export function GraphCanvas() {
           effective: effectiveById[n.id] ?? n.strength,
         },
       })),
-    [nodes, selectedNodeId, effectiveById],
+    [nodes, selectedNodeId, effectiveById, footprint],
   );
 
   const rfEdges = useMemo<RFEdge[]>(
@@ -97,14 +103,11 @@ export function GraphCanvas() {
         target: String(e.to_id),
         selected: e.id === selectedEdgeId,
         markerEnd: { type: MarkerType.ArrowClosed },
-        // Disjunctive ("any-of") feeders render dashed; conjunctive solid (§5).
         style: e.kind === "disjunctive" ? { strokeDasharray: "7 5" } : undefined,
       })),
     [edges, selectedEdgeId],
   );
 
-  // Controlled selection: apply position live during drag, and mirror RF's
-  // select changes into our store so the selected node/edge highlights.
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       for (const c of changes) {
@@ -148,14 +151,13 @@ export function GraphCanvas() {
     [setEditing],
   );
 
-  // Double-click an edge to flip conjunctive <-> disjunctive.
-  const onEdgeDoubleClick = useCallback(
-    (_e: ReactMouseEvent, edge: RFEdge) => {
-      const cur = useSpine.getState().edges.find((x) => x.id === Number(edge.id));
-      if (cur) void setEdgeKind(cur.id, cur.kind === "conjunctive" ? "disjunctive" : "conjunctive");
-    },
-    [setEdgeKind],
-  );
+  const onEdgeDoubleClick = useCallback((_e: ReactMouseEvent, edge: RFEdge) => {
+    const cur = useSpine.getState().edges.find((x) => x.id === Number(edge.id));
+    if (cur)
+      void useSpine
+        .getState()
+        .setEdgeKind(cur.id, cur.kind === "conjunctive" ? "disjunctive" : "conjunctive");
+  }, []);
 
   const onPaneDoubleClick = useCallback(
     (e: ReactMouseEvent) => {

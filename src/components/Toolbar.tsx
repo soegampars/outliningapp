@@ -12,6 +12,8 @@ export function Toolbar() {
   const importBibtex = useSpine((s) => s.importBibtex);
   const view = useSpine((s) => s.view);
   const setView = useSpine((s) => s.setView);
+  const sourcesOpen = useSpine((s) => s.sourcesOpen);
+  const toggleSources = useSpine((s) => s.toggleSources);
   const { screenToFlowPosition } = useReactFlow();
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -69,6 +71,14 @@ export function Toolbar() {
         onChange={onFile}
       />
       <ExportMenu />
+      {view === "graph" && (
+        <button
+          className={"spine-btn" + (sourcesOpen ? " active" : "")}
+          onClick={() => toggleSources()}
+        >
+          Sources
+        </button>
+      )}
 
       <span className="spine-toolbar__hint">
         {view === "graph"

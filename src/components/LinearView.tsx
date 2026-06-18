@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useSpine } from "../state/store";
-import * as repo from "../data/repo";
 import type { ArgNode, Support } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
 import { shortLabel } from "../lib/bibtex";
@@ -11,6 +10,7 @@ import { shortLabel } from "../lib/bibtex";
 export function LinearView() {
   const nodes = useSpine((s) => s.nodes);
   const edges = useSpine((s) => s.edges);
+  const allSupports = useSpine((s) => s.supports);
   const linearOrder = useSpine((s) => s.linearOrder);
   const nodeTypeById = useSpine((s) => s.nodeTypeById);
   const sourceById = useSpine((s) => s.sourceById);
@@ -18,26 +18,19 @@ export function LinearView() {
   const select = useSpine((s) => s.select);
   const setView = useSpine((s) => s.setView);
 
-  const [supports, setSupports] = useState<Support[]>([]);
-  useEffect(() => {
-    void repo.listAllSupports().then(setSupports);
-  }, [nodes.length]);
-
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const effectiveById = useMemo(() => computeEffectiveStrength(nodes, edges), [nodes, edges]);
   const supportsByNode = useMemo(() => {
     const m = new Map<number, Support[]>();
-    for (const s of supports) {
+    for (const s of allSupports) {
       const a = m.get(s.node_id);
       if (a) a.push(s);
       else m.set(s.node_id, [s]);
     }
     return m;
-  }, [supports]);
+  }, [allSupports]);
 
-  const ordered = linearOrder
-    .map((id) => nodeById.get(id))
-    .filter((n): n is ArgNode => !!n);
+  const ordered = linearOrder.map((id) => nodeById.get(id)).filter((n): n is ArgNode => !!n);
 
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir;

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ArgNode, Edge, EdgeKind, NodeType, Source, Strength } from "../model/types";
+import type { ArgNode, Edge, EdgeKind, NodeType, Source, Strength, Support } from "../model/types";
 import * as repo from "../data/repo";
 import { entryToSource, parseBibtex } from "../lib/bibtex";
 import { topoOrderIds } from "../model/order";
@@ -15,12 +15,15 @@ interface SpineState {
   nodeTypeById: Record<number, NodeType>;
   nodes: ArgNode[];
   edges: Edge[];
+  supports: Support[];
   sources: Source[];
   sourceById: Record<number, Source>;
-  linearOrder: number[]; // curated reading order (node ids)
+  linearOrder: number[];
   selectedNodeId: number | null;
   selectedEdgeId: number | null;
   editingNodeId: number | null;
+  sourcesOpen: boolean; // provenance panel toggle
+  focusedSourceId: number | null; // highlight this source's footprint on the canvas
 
   load: () => Promise<void>;
   setView: (v: ViewMode) => void;
@@ -37,11 +40,17 @@ interface SpineState {
   addEdge: (fromId: number, toId: number) => Promise<void>;
   setEdgeKind: (id: number, kind: EdgeKind) => Promise<void>;
   removeEdge: (id: number) => Promise<void>;
+  addSupport: (nodeId: number) => Promise<void>;
+  setSupportText: (id: number, text: string) => Promise<void>;
+  setSupportSource: (id: number, sourceId: number | null) => Promise<void>;
+  removeSupport: (id: number) => Promise<void>;
   importBibtex: (text: string) => Promise<{ created: number; updated: number; total: number }>;
   ensureLinearOrder: () => Promise<void>;
   setLinearOrder: (ids: number[]) => Promise<void>;
   select: (nodeId: number | null, edgeId: number | null) => void;
   setEditing: (id: number | null) => void;
+  toggleSources: () => void;
+  focusSource: (id: number | null) => void;
 }
 
 function indexSources(sources: Source[]): Record<number, Source> {
@@ -57,18 +66,22 @@ export const useSpine = create<SpineState>((set, get) => ({
   nodeTypeById: {},
   nodes: [],
   edges: [],
+  supports: [],
   sources: [],
   sourceById: {},
   linearOrder: [],
   selectedNodeId: null,
   selectedEdgeId: null,
   editingNodeId: null,
+  sourcesOpen: false,
+  focusedSourceId: null,
 
   async load() {
-    const [nodeTypes, nodes, edges, sources, linearOrder] = await Promise.all([
+    const [nodeTypes, nodes, edges, supports, sources, linearOrder] = await Promise.all([
       repo.listNodeTypes(),
       repo.listNodes(),
       repo.listEdges(),
+      repo.listAllSupports(),
       repo.listSources(),
       repo.getLinearOrder(),
     ]);
@@ -79,6 +92,7 @@ export const useSpine = create<SpineState>((set, get) => ({
       nodeTypeById,
       nodes,
       edges,
+      supports,
       sources,
       sourceById: indexSources(sources),
       linearOrder,
@@ -119,10 +133,15 @@ export const useSpine = create<SpineState>((set, get) => ({
       pos_y: src.pos_y + 32,
     };
     const newId = await repo.createNodeFull(fields);
-    const sups = await repo.listSupportsForNode(id);
-    for (const s of sups) await repo.createSupport(newId, s.text, s.source_id, s.sort_order);
+    const srcSupports = get().supports.filter((s) => s.node_id === id);
+    const newSupports: Support[] = [];
+    for (const s of srcSupports) {
+      const sid = await repo.createSupport(newId, s.text, s.source_id, s.sort_order);
+      newSupports.push({ id: sid, node_id: newId, text: s.text, source_id: s.source_id, sort_order: s.sort_order });
+    }
     set((s) => ({
       nodes: [...s.nodes, { id: newId, ...fields }],
+      supports: [...s.supports, ...newSupports],
       selectedNodeId: newId,
       selectedEdgeId: null,
     }));
@@ -167,6 +186,7 @@ export const useSpine = create<SpineState>((set, get) => ({
     set((s) => ({
       nodes: s.nodes.filter((n) => n.id !== id),
       edges: s.edges.filter((e) => e.from_id !== id && e.to_id !== id),
+      supports: s.supports.filter((x) => x.node_id !== id),
       linearOrder: s.linearOrder.filter((x) => x !== id),
       selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
       editingNodeId: s.editingNodeId === id ? null : s.editingNodeId,
@@ -195,6 +215,29 @@ export const useSpine = create<SpineState>((set, get) => ({
     }));
   },
 
+  async addSupport(nodeId) {
+    const order = get().supports.filter((s) => s.node_id === nodeId).length;
+    const id = await repo.createSupport(nodeId, "", null, order);
+    set((s) => ({
+      supports: [...s.supports, { id, node_id: nodeId, text: "", source_id: null, sort_order: order }],
+    }));
+  },
+
+  async setSupportText(id, text) {
+    await repo.updateSupportText(id, text);
+    set((s) => ({ supports: s.supports.map((x) => (x.id === id ? { ...x, text } : x)) }));
+  },
+
+  async setSupportSource(id, sourceId) {
+    await repo.updateSupportSource(id, sourceId);
+    set((s) => ({ supports: s.supports.map((x) => (x.id === id ? { ...x, source_id: sourceId } : x)) }));
+  },
+
+  async removeSupport(id) {
+    await repo.deleteSupport(id);
+    set((s) => ({ supports: s.supports.filter((x) => x.id !== id) }));
+  },
+
   async importBibtex(text) {
     const entries = parseBibtex(text);
     const existing = new Set(get().sources.map((s) => s.key));
@@ -215,8 +258,6 @@ export const useSpine = create<SpineState>((set, get) => ({
     return { created, updated, total: entries.length };
   },
 
-  // Normalise the curated order: keep the stored sequence (for existing nodes),
-  // then append any nodes not yet placed, in proposed topological order.
   async ensureLinearOrder() {
     const { nodes, edges, linearOrder } = get();
     const existing = new Set(nodes.map((n) => n.id));
@@ -239,6 +280,18 @@ export const useSpine = create<SpineState>((set, get) => ({
 
   setEditing(id) {
     set({ editingNodeId: id });
+  },
+
+  toggleSources() {
+    set((s) => ({
+      sourcesOpen: !s.sourcesOpen,
+      selectedNodeId: !s.sourcesOpen ? null : s.selectedNodeId, // opening: show the sources panel
+      focusedSourceId: s.sourcesOpen ? null : s.focusedSourceId, // closing: drop the highlight
+    }));
+  },
+
+  focusSource(id) {
+    set((s) => ({ focusedSourceId: s.focusedSourceId === id ? null : id }));
   },
 }));
 
