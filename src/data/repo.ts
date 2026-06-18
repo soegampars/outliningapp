@@ -1,5 +1,6 @@
 import { getDb } from "../db";
 import type { ArgNode, Edge, EdgeKind, NodeType, Source, Strength, Support } from "../model/types";
+import { DEFAULT_NODE_TYPES } from "../db/schema";
 
 // CRUD over the SQLite model. SQLite stays the single source of truth (§2.4);
 // the in-memory store (state/store.ts) is a projection hydrated from here.
@@ -233,5 +234,98 @@ export async function upsertSource(s: {
        venue = excluded.venue,
        raw_bibtex = excluded.raw_bibtex`,
     [s.key, s.author, s.year, s.title, s.venue, s.raw_bibtex],
+  );
+}
+
+// --- Project files: wipe / seed / bulk insert, and app metadata (Save/Open) ---
+
+// The whole model as a portable bundle (serialised to a .spine.json file).
+export interface ProjectData {
+  nodeTypes: NodeType[];
+  nodes: ArgNode[];
+  edges: Edge[];
+  sources: Source[];
+  supports: Support[];
+  linearOrder: number[];
+}
+
+export async function wipeAll(): Promise<void> {
+  const db = await conn();
+  await db.execute("DELETE FROM linear_order");
+  await db.execute("DELETE FROM support");
+  await db.execute("DELETE FROM edge");
+  await db.execute("DELETE FROM node");
+  await db.execute("DELETE FROM source");
+  await db.execute("DELETE FROM node_type");
+}
+
+export async function seedDefaultTypes(): Promise<void> {
+  const db = await conn();
+  let i = 0;
+  for (const t of DEFAULT_NODE_TYPES) {
+    await db.execute(
+      "INSERT INTO node_type (name, role, sort_order, builtin) VALUES ($1, $2, $3, 1)",
+      [t.name, t.role, i++],
+    );
+  }
+}
+
+// Insert a full project with explicit ids (parents before children). FK
+// enforcement is off, but parent-first keeps it tidy; AUTOINCREMENT sequences
+// advance to the inserted maxima, so later inserts won't collide.
+export async function bulkInsert(p: ProjectData): Promise<void> {
+  const db = await conn();
+  for (const t of p.nodeTypes) {
+    await db.execute(
+      "INSERT INTO node_type (id, name, icon, role, sort_order, builtin) VALUES ($1, $2, $3, $4, $5, $6)",
+      [t.id, t.name, t.icon, t.role, t.sort_order, t.builtin],
+    );
+  }
+  for (const s of p.sources) {
+    await db.execute(
+      "INSERT INTO source (id, key, author, year, title, venue, raw_bibtex) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [s.id, s.key, s.author, s.year, s.title, s.venue, s.raw_bibtex],
+    );
+  }
+  for (const n of p.nodes) {
+    await db.execute(
+      "INSERT INTO node (id, type_id, claim, body, strength, attention, pos_x, pos_y) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [n.id, n.type_id, n.claim, n.body, n.strength, n.attention, n.pos_x, n.pos_y],
+    );
+  }
+  for (const e of p.edges) {
+    await db.execute("INSERT INTO edge (id, from_id, to_id, kind) VALUES ($1, $2, $3, $4)", [
+      e.id,
+      e.from_id,
+      e.to_id,
+      e.kind,
+    ]);
+  }
+  for (const s of p.supports) {
+    await db.execute(
+      "INSERT INTO support (id, node_id, text, source_id, sort_order) VALUES ($1, $2, $3, $4, $5)",
+      [s.id, s.node_id, s.text, s.source_id, s.sort_order],
+    );
+  }
+  let pos = 0;
+  for (const id of p.linearOrder) {
+    await db.execute("INSERT INTO linear_order (node_id, position) VALUES ($1, $2)", [id, pos++]);
+  }
+}
+
+export async function getMeta(key: string): Promise<string | null> {
+  const db = await conn();
+  const rows = await db.select<{ value: string | null }>(
+    "SELECT value FROM app_meta WHERE key = $1",
+    [key],
+  );
+  return rows.length ? (rows[0]?.value ?? null) : null;
+}
+
+export async function setMeta(key: string, value: string | null): Promise<void> {
+  const db = await conn();
+  await db.execute(
+    "INSERT INTO app_meta (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [key, value],
   );
 }

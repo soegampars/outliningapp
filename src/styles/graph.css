@@ -403,6 +403,71 @@
     0 0 16px rgba(91, 141, 239, 0.5);
 }
 
+/* File menu + current-file label */
+.file-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.file-menu__pop {
+  min-width: 150px;
+}
+.file-menu__pop button {
+  text-align: left;
+}
+.spine-toolbar__file {
+  color: var(--text-secondary);
+  font-size: 12px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Confirmation modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal {
+  background: var(--panel-surface);
+  border: 1px solid var(--edge-default);
+  border-radius: 10px;
+  padding: 20px 22px;
+  max-width: 400px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.modal__title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.modal__body {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.modal__danger {
+  border-color: var(--strength-weak);
+  color: var(--strength-weak);
+}
+.modal__danger:hover {
+  background: var(--strength-weak);
+  color: var(--canvas-bg);
+}
+
 /* Citation info line under a linked support (Zotero-style, §3). */
 .peek-cite {
   font-size: 11px;

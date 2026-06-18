@@ -24,8 +24,13 @@ interface SpineState {
   editingNodeId: number | null;
   sourcesOpen: boolean; // provenance panel toggle
   focusedSourceId: number | null; // highlight this source's footprint on the canvas
+  currentFileName: string | null; // open project file (display)
+  currentFilePath: string | null; // open project file (full path, for overwrite-on-Save)
 
   load: () => Promise<void>;
+  newProject: () => Promise<void>;
+  loadProjectData: (p: repo.ProjectData) => Promise<void>;
+  setCurrentFile: (name: string | null, path: string | null) => Promise<void>;
   setView: (v: ViewMode) => void;
   addNode: (typeId: number, x: number, y: number) => Promise<void>;
   duplicateNode: (id: number) => Promise<void>;
@@ -75,16 +80,21 @@ export const useSpine = create<SpineState>((set, get) => ({
   editingNodeId: null,
   sourcesOpen: false,
   focusedSourceId: null,
+  currentFileName: null,
+  currentFilePath: null,
 
   async load() {
-    const [nodeTypes, nodes, edges, supports, sources, linearOrder] = await Promise.all([
-      repo.listNodeTypes(),
-      repo.listNodes(),
-      repo.listEdges(),
-      repo.listAllSupports(),
-      repo.listSources(),
-      repo.getLinearOrder(),
-    ]);
+    const [nodeTypes, nodes, edges, supports, sources, linearOrder, fileName, filePath] =
+      await Promise.all([
+        repo.listNodeTypes(),
+        repo.listNodes(),
+        repo.listEdges(),
+        repo.listAllSupports(),
+        repo.listSources(),
+        repo.getLinearOrder(),
+        repo.getMeta("currentFileName"),
+        repo.getMeta("currentFilePath"),
+      ]);
     const nodeTypeById: Record<number, NodeType> = {};
     for (const t of nodeTypes) nodeTypeById[t.id] = t;
     set({
@@ -96,8 +106,48 @@ export const useSpine = create<SpineState>((set, get) => ({
       sources,
       sourceById: indexSources(sources),
       linearOrder,
+      currentFileName: fileName,
+      currentFilePath: filePath,
       loaded: true,
     });
+  },
+
+  // Replace the working project with a fresh, empty one (default node types).
+  async newProject() {
+    await repo.wipeAll();
+    await repo.seedDefaultTypes();
+    await repo.setMeta("currentFileName", null);
+    await repo.setMeta("currentFilePath", null);
+    await get().load();
+    set({
+      view: "graph",
+      selectedNodeId: null,
+      selectedEdgeId: null,
+      editingNodeId: null,
+      sourcesOpen: false,
+      focusedSourceId: null,
+    });
+  },
+
+  // Replace the working project with the contents of an opened .spine file.
+  async loadProjectData(p) {
+    await repo.wipeAll();
+    await repo.bulkInsert(p);
+    await get().load();
+    set({
+      view: "graph",
+      selectedNodeId: null,
+      selectedEdgeId: null,
+      editingNodeId: null,
+      sourcesOpen: false,
+      focusedSourceId: null,
+    });
+  },
+
+  async setCurrentFile(name, path) {
+    await repo.setMeta("currentFileName", name);
+    await repo.setMeta("currentFilePath", path);
+    set({ currentFileName: name, currentFilePath: path });
   },
 
   setView(v) {
@@ -137,7 +187,13 @@ export const useSpine = create<SpineState>((set, get) => ({
     const newSupports: Support[] = [];
     for (const s of srcSupports) {
       const sid = await repo.createSupport(newId, s.text, s.source_id, s.sort_order);
-      newSupports.push({ id: sid, node_id: newId, text: s.text, source_id: s.source_id, sort_order: s.sort_order });
+      newSupports.push({
+        id: sid,
+        node_id: newId,
+        text: s.text,
+        source_id: s.source_id,
+        sort_order: s.sort_order,
+      });
     }
     set((s) => ({
       nodes: [...s.nodes, { id: newId, ...fields }],
@@ -219,7 +275,10 @@ export const useSpine = create<SpineState>((set, get) => ({
     const order = get().supports.filter((s) => s.node_id === nodeId).length;
     const id = await repo.createSupport(nodeId, "", null, order);
     set((s) => ({
-      supports: [...s.supports, { id, node_id: nodeId, text: "", source_id: null, sort_order: order }],
+      supports: [
+        ...s.supports,
+        { id, node_id: nodeId, text: "", source_id: null, sort_order: order },
+      ],
     }));
   },
 

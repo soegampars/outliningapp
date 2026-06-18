@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { useSpine } from "../state/store";
 import { ExportMenu } from "./ExportMenu";
+import { FileMenu } from "./FileMenu";
 
 export function Toolbar() {
   const nodeCount = useSpine((s) => s.nodes.length);
@@ -14,6 +15,7 @@ export function Toolbar() {
   const setView = useSpine((s) => s.setView);
   const sourcesOpen = useSpine((s) => s.sourcesOpen);
   const toggleSources = useSpine((s) => s.toggleSources);
+  const currentFileName = useSpine((s) => s.currentFileName);
   const { screenToFlowPosition } = useReactFlow();
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -39,6 +41,10 @@ export function Toolbar() {
   return (
     <header className="spine-toolbar">
       <span className="spine-toolbar__title">Spine</span>
+      <FileMenu />
+      <span className="spine-toolbar__file" title={currentFileName ?? "Unsaved project"}>
+        {currentFileName ?? "untitled"}
+      </span>
 
       <div className="spine-seg">
         <button
