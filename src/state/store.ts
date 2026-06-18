@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ArgNode, Edge, NodeType } from "../model/types";
+import type { ArgNode, Edge, NodeType, Strength } from "../model/types";
 import * as repo from "../data/repo";
 
 // In-memory projection of the model. Mutations write through to SQLite (repo)
@@ -16,8 +16,12 @@ interface SpineState {
 
   load: () => Promise<void>;
   addNode: (typeId: number, x: number, y: number) => Promise<void>;
+  duplicateNode: (id: number) => Promise<void>;
   setNodeClaim: (id: number, claim: string) => Promise<void>;
+  setNodeBody: (id: number, body: string) => Promise<void>;
   setNodeType: (id: number, typeId: number) => Promise<void>;
+  setNodeStrength: (id: number, strength: Strength) => Promise<void>;
+  setNodeAttention: (id: number, attention: number) => Promise<void>;
   moveNodeLocal: (id: number, x: number, y: number) => void; // live, during drag
   persistNodePosition: (id: number) => Promise<void>; // on drag stop
   removeNode: (id: number) => Promise<void>;
@@ -63,14 +67,52 @@ export const useSpine = create<SpineState>((set, get) => ({
     set((s) => ({ nodes: [...s.nodes, node], selectedNodeId: id, selectedEdgeId: null }));
   },
 
+  // Duplicate a node with its content and its supports (not its edges).
+  async duplicateNode(id) {
+    const src = get().nodes.find((n) => n.id === id);
+    if (!src) return;
+    const fields = {
+      type_id: src.type_id,
+      claim: src.claim,
+      body: src.body,
+      strength: src.strength,
+      attention: src.attention,
+      pos_x: src.pos_x + 32,
+      pos_y: src.pos_y + 32,
+    };
+    const newId = await repo.createNodeFull(fields);
+    const sups = await repo.listSupportsForNode(id);
+    for (const s of sups) await repo.createSupport(newId, s.text, s.source_id, s.sort_order);
+    set((s) => ({
+      nodes: [...s.nodes, { id: newId, ...fields }],
+      selectedNodeId: newId,
+      selectedEdgeId: null,
+    }));
+  },
+
   async setNodeClaim(id, claim) {
     await repo.updateNodeClaim(id, claim);
     set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, claim } : n)) }));
   },
 
+  async setNodeBody(id, body) {
+    await repo.updateNodeBody(id, body);
+    set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, body } : n)) }));
+  },
+
   async setNodeType(id, typeId) {
     await repo.updateNodeType(id, typeId);
     set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, type_id: typeId } : n)) }));
+  },
+
+  async setNodeStrength(id, strength) {
+    await repo.updateNodeStrength(id, strength);
+    set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, strength } : n)) }));
+  },
+
+  async setNodeAttention(id, attention) {
+    await repo.updateNodeAttention(id, attention);
+    set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, attention } : n)) }));
   },
 
   moveNodeLocal(id, x, y) {

@@ -3,6 +3,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { useSpine } from "./state/store";
 import { GraphCanvas } from "./components/GraphCanvas";
 import { Toolbar } from "./components/Toolbar";
+import { PeekPanel } from "./components/PeekPanel";
 
 export default function App() {
   const load = useSpine((s) => s.load);
@@ -16,12 +17,15 @@ export default function App() {
     <ReactFlowProvider>
       <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
         <Toolbar />
-        <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-          {loaded ? (
-            <GraphCanvas />
-          ) : (
-            <div style={{ padding: 24, color: "var(--text-secondary)" }}>Opening model…</div>
-          )}
+        <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+          <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
+            {loaded ? (
+              <GraphCanvas />
+            ) : (
+              <div style={{ padding: 24, color: "var(--text-secondary)" }}>Opening model…</div>
+            )}
+          </div>
+          <PeekPanel />
         </div>
       </div>
     </ReactFlowProvider>

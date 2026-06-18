@@ -90,6 +90,13 @@
   background: var(--support-citation);
 }
 
+/* Selected edge — clear visual feedback so it can be deleted with Delete. */
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path {
+  stroke: var(--support-citation);
+  stroke-width: 2.5;
+}
+
 /* --- Toolbar --- */
 .spine-toolbar {
   display: flex;
@@ -127,4 +134,250 @@
 }
 .spine-btn:hover {
   border-color: var(--text-secondary);
+}
+
+/* --- Peek / inspector panel (§4.2) --- */
+.peek-panel {
+  flex: 0 0 360px;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--panel-surface);
+  border-left: 1px solid var(--edge-default);
+  padding: 14px 16px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.peek-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.peek-type {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--node-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--edge-default);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.peek-iconbtn {
+  background: transparent;
+  border: 1px solid var(--edge-default);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  font-size: 15px;
+  line-height: 1;
+}
+.peek-iconbtn:last-child {
+  margin-left: auto;
+}
+.peek-iconbtn:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+.peek-iconbtn.active {
+  color: var(--strength-unfinished);
+  border-color: var(--strength-unfinished);
+}
+
+.peek-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.peek-section__label {
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.peek-input,
+.peek-textarea {
+  width: 100%;
+  background: var(--canvas-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--edge-default);
+  border-radius: 6px;
+  font: inherit;
+  padding: 7px 9px;
+}
+.peek-textarea {
+  min-height: 72px;
+  line-height: 1.4;
+  resize: vertical;
+}
+.peek-input:focus,
+.peek-textarea:focus {
+  outline: none;
+  border-color: var(--support-citation);
+}
+
+.peek-strength {
+  display: flex;
+  gap: 6px;
+}
+.peek-strength button {
+  flex: 1;
+  background: var(--node-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--edge-default);
+  border-radius: 6px;
+  padding: 6px 4px;
+  font-size: 12px;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+.peek-strength button:hover {
+  color: var(--text-primary);
+}
+.peek-strength button.active {
+  color: var(--canvas-bg);
+  font-weight: 600;
+}
+.peek-strength button.active.strong {
+  background: var(--strength-strong);
+  border-color: var(--strength-strong);
+}
+.peek-strength button.active.unfinished {
+  background: var(--strength-unfinished);
+  border-color: var(--strength-unfinished);
+}
+.peek-strength button.active.weak {
+  background: var(--strength-weak);
+  border-color: var(--strength-weak);
+}
+
+.peek-support {
+  background: var(--node-surface);
+  border: 1px solid var(--edge-default);
+  border-left: 3px solid var(--support-own);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.peek-support.citation {
+  border-left-color: var(--support-citation);
+}
+.peek-support__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.peek-support__kind {
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.peek-support__kind.own {
+  color: var(--support-own);
+}
+.peek-support__kind.citation {
+  color: var(--support-citation);
+}
+.peek-support select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--canvas-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--edge-default);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.peek-support textarea {
+  width: 100%;
+  background: var(--canvas-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--edge-default);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 7px;
+  resize: vertical;
+  min-height: 46px;
+  line-height: 1.35;
+}
+
+.peek-del {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 4px;
+}
+.peek-del:hover {
+  color: var(--strength-weak);
+}
+
+.peek-btn-add {
+  background: var(--node-surface);
+  color: var(--text-primary);
+  border: 1px dashed var(--edge-default);
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.peek-btn-add:hover {
+  border-color: var(--text-secondary);
+}
+
+.peek-conn {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  background: var(--node-surface);
+  border: 1px solid var(--edge-default);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  width: 100%;
+  color: var(--text-primary);
+}
+.peek-conn:hover {
+  border-color: var(--text-secondary);
+}
+.peek-conn__type {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+.peek-claim-line {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.peek-conn__kind {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.peek-empty {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-style: italic;
 }

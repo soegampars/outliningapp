@@ -1,5 +1,5 @@
 import { getDb } from "../db";
-import type { ArgNode, Edge, EdgeKind, NodeType } from "../model/types";
+import type { ArgNode, Edge, EdgeKind, NodeType, Source, Strength, Support } from "../model/types";
 
 // CRUD over the SQLite model. SQLite stays the single source of truth (§2.4);
 // the in-memory store (state/store.ts) is a projection hydrated from here.
@@ -49,10 +49,34 @@ export async function updateNodeClaim(id: number, claim: string): Promise<void> 
   ]);
 }
 
+export async function updateNodeBody(id: number, body: string): Promise<void> {
+  const db = await conn();
+  await db.execute("UPDATE node SET body = $1, updated_at = datetime('now') WHERE id = $2", [
+    body,
+    id,
+  ]);
+}
+
 export async function updateNodeType(id: number, typeId: number): Promise<void> {
   const db = await conn();
   await db.execute("UPDATE node SET type_id = $1, updated_at = datetime('now') WHERE id = $2", [
     typeId,
+    id,
+  ]);
+}
+
+export async function updateNodeStrength(id: number, strength: Strength): Promise<void> {
+  const db = await conn();
+  await db.execute("UPDATE node SET strength = $1, updated_at = datetime('now') WHERE id = $2", [
+    strength,
+    id,
+  ]);
+}
+
+export async function updateNodeAttention(id: number, attention: number): Promise<void> {
+  const db = await conn();
+  await db.execute("UPDATE node SET attention = $1, updated_at = datetime('now') WHERE id = $2", [
+    attention,
     id,
   ]);
 }
@@ -88,4 +112,70 @@ export async function createEdge(
 export async function deleteEdge(id: number): Promise<void> {
   const db = await conn();
   await db.execute("DELETE FROM edge WHERE id = $1", [id]);
+}
+
+// --- Supports (one use of evidence on one node; §3) ---
+
+export async function listSupportsForNode(nodeId: number): Promise<Support[]> {
+  const db = await conn();
+  return db.select<Support>(
+    "SELECT id, node_id, text, source_id, sort_order FROM support WHERE node_id = $1 ORDER BY sort_order, id",
+    [nodeId],
+  );
+}
+
+export async function createSupport(
+  nodeId: number,
+  text: string,
+  sourceId: number | null,
+  sortOrder: number,
+): Promise<number> {
+  const db = await conn();
+  const r = await db.execute(
+    "INSERT INTO support (node_id, text, source_id, sort_order) VALUES ($1, $2, $3, $4)",
+    [nodeId, text, sourceId, sortOrder],
+  );
+  return Number(r.lastInsertId);
+}
+
+export async function updateSupportText(id: number, text: string): Promise<void> {
+  const db = await conn();
+  await db.execute("UPDATE support SET text = $1 WHERE id = $2", [text, id]);
+}
+
+export async function updateSupportSource(id: number, sourceId: number | null): Promise<void> {
+  const db = await conn();
+  await db.execute("UPDATE support SET source_id = $1 WHERE id = $2", [sourceId, id]);
+}
+
+export async function deleteSupport(id: number): Promise<void> {
+  const db = await conn();
+  await db.execute("DELETE FROM support WHERE id = $1", [id]);
+}
+
+// --- Sources (populated by BibTeX import in Step 4) ---
+
+export async function listSources(): Promise<Source[]> {
+  const db = await conn();
+  return db.select<Source>(
+    "SELECT id, key, author, year, title, venue, raw_bibtex FROM source ORDER BY key",
+  );
+}
+
+// Insert a node with all fields set (used by duplicate).
+export async function createNodeFull(n: {
+  type_id: number;
+  claim: string;
+  body: string;
+  strength: Strength;
+  attention: number;
+  pos_x: number;
+  pos_y: number;
+}): Promise<number> {
+  const db = await conn();
+  const r = await db.execute(
+    "INSERT INTO node (type_id, claim, body, strength, attention, pos_x, pos_y) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    [n.type_id, n.claim, n.body, n.strength, n.attention, n.pos_x, n.pos_y],
+  );
+  return Number(r.lastInsertId);
 }

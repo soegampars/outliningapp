@@ -22,7 +22,7 @@ export function Toolbar() {
         + Add node
       </button>
       <span className="spine-toolbar__hint">
-        Double-click canvas to add · drag handles to connect · Delete to remove
+        Double-click to add · drag to connect · Ctrl+D duplicate · click + Delete to remove
       </span>
       <span className="spine-toolbar__spacer" />
       <span className="spine-toolbar__count">
