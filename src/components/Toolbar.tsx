@@ -1,6 +1,7 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { useSpine } from "../state/store";
+import { ExportMenu } from "./ExportMenu";
 
 export function Toolbar() {
   const nodeCount = useSpine((s) => s.nodes.length);
@@ -47,6 +48,7 @@ export function Toolbar() {
         style={{ display: "none" }}
         onChange={onFile}
       />
+      <ExportMenu />
       <span className="spine-toolbar__hint">
         Double-click to add · drag to connect · Ctrl+D duplicate · click + Delete to remove
       </span>

@@ -129,6 +129,13 @@ export async function listSupportsForNode(nodeId: number): Promise<Support[]> {
   );
 }
 
+export async function listAllSupports(): Promise<Support[]> {
+  const db = await conn();
+  return db.select<Support>(
+    "SELECT id, node_id, text, source_id, sort_order FROM support ORDER BY node_id, sort_order, id",
+  );
+}
+
 export async function createSupport(
   nodeId: number,
   text: string,
