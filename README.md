@@ -6,7 +6,7 @@ Spine is a single-user, local-first desktop app for the structural stage of writ
 
 It is deliberately **not** a reference manager, **not** a prose word-processor, and **not** a note vault. The actual writing and your reference library live elsewhere (Zotero, your editor of choice). Spine serves the one stage those tools handle badly: keeping the high-order argument legible while you work.
 
-> **Status: early, actively developed.** The core model and the skeleton-graph canvas are working (Step 1 of the roadmap below). Expect rough edges.
+> **Status: feature-complete (v1 + v2), actively developed.** The whole v1 roadmap — model, inspector, weakest-link strength propagation, BibTeX import, Markdown export, linear view, provenance tools — is working, along with the v2 mechanics: nested argument blocks, cross-level strength, gap/terminus handling, and spine-vs-lateral rendering. Expect rough edges.
 
 <!-- ![Spine canvas](docs/screenshot.png) -->
 
@@ -78,45 +78,79 @@ Four object types plus edges, stored in one SQLite file:
 
 | Object | What it is |
 |---|---|
-| **Node** | An argument move: a `type` (PREMISE, TENSION, CONCLUSION, …), a short `claim`, an optional longer `body`, a manual `strength` (`strong` / `unfinished` / `weak`), and an `attention` pin. |
+| **Node** | An argument move: a `type` (PREMISE, TENSION, CONCLUSION, QUESTION, GAP, …), a short `claim`, an optional longer `body`, a manual `strength` (`strong` / `unfinished` / `weak`), and an `attention` pin. A node can also become a **block** that owns its own internal sub-canvas (see below). |
 | **Edge** | A logical connection from a supporting move → the move it supports, with a `kind`: **conjunctive** (jointly required) or **disjunctive** (redundant alternative). |
 | **Support** | One use of evidence on one node — a paraphrase, quote, or your own gloss. Optionally linked to a Source (present = a citation; absent = your own reasoning). |
 | **Source** | A cached *identity* of a paper (from a BibTeX import), not a library. Matched on a stable key so re-importing refreshes in place. |
 
-Node types are **data, not code** — extensible in-app. Strength feeds a (planned) weakest-link propagation so that softening one premise visibly softens every conclusion that depends on it.
+Node types are **data, not code** — extensible in-app. Strength feeds a **weakest-link propagation** so that softening one premise visibly softens every conclusion that depends on it — *conjunctive* feeders combine by the minimum, a *disjunctive* set by the maximum, each capped by a node's own strength.
+
+## Key mechanics
+
+These build on the model above; all of them are projections of the same SQLite store, computed on the fly.
+
+- **Nested argument blocks (two levels).** Any node can "build internal structure" and open into its own sub-canvas with its own moves and edges. The block's **output** (its internal conclusion — the node with no outgoing internal edge) is mirrored, read-only, on the collapsed block one level up. Double-click a block to drill in; a breadcrumb (or `Esc`) walks back out. Edges are scoped to a single level — only the output (claim) and strength cross the boundary.
+- **Cross-level strength bridge.** A block's effective strength *is* the propagated strength of its inner output, capped by any strength set on the block itself. So a weak link buried inside a block surfaces as a soft box at the top level — sit at the top, see which box is soft, drill in, and the weak internal link is right there.
+- **Gaps and the open terminus.** Two built-in "hole" types — **Gap** (a known missing step) and **Question / Open gap** (a slot to fill later). A gap with something resting on it propagates as *broken* and poisons everything downstream until filled. But a gap with **no dependents** — the end of the spine — is a legitimate **open ending** and is never flagged: a finished argument may rightly land on an open question.
+- **Spine vs lateral support.** Derived from the curated linear order plus the edges: the main thread renders as a bold **backbone**, while off-path moves that merely prop up a step attach from the side with a lighter **side-connector** — so it stays obvious which boxes advance the argument and which support it.
+- **Argument-position roles.** The **terminus** (where the argument lands — *any* type, including an open question) and a block's **output** get a distinct frame, and intermediate/section conclusions read differently from the final terminus, so the overall shape stays legible.
+
+## Saving & opening
+
+Projects are plain **`.spine.json`** files — the whole model (nodes, edges, supports, sources, linear order) serialised as JSON, so a project is portable, diffable, and trivially backed up. **File ▸ New / Open / Save** (or `Ctrl+N` / `Ctrl+O` / `Ctrl+S`); New and Open warn before discarding unsaved work. There are deliberately **no tabs** — one project on the canvas at a time.
 
 ## Project layout
 
 ```
 src/                React frontend — all UI/UX
-  db/               storage abstraction: Db interface + tauri/sql.js backends + schema
+  db/               storage abstraction: Db interface + tauri/sql.js backends + schema/migrations
   data/             repository (SQL CRUD over the model)
-  state/            zustand store (in-memory projection of the model)
-  components/       graph canvas, argument node, toolbar
-  model/            domain types
+  state/            zustand store (in-memory projection of the model + all actions)
+  components/       canvas, argument node, peek/inspector, toolbar, linear view,
+                    sources, export menu, breadcrumb, confirm modal
+  model/            domain types + pure logic: strength, order, blocks, gaps, spine, provenance
+  lib/              bibtex import, markdown export, .spine.json project files
   styles/           dark-mode theme tokens + canvas styling
-src-tauri/          Rust shell (registers the SQL + opener plugins; otherwise minimal)
+src-tauri/          Rust shell (registers the SQL, dialog + opener plugins; file read/write commands)
 ```
 
 ## Interactions
 
 - **Double-click the canvas** — add a node
-- **Double-click a node** — edit its claim
+- **Double-click a node** — edit its claim (or, if it's a block, drill into its sub-canvas)
 - **Drag** from a node's bottom handle to another node's top handle — connect (supporter → supported)
-- **Select + Delete / Backspace** — remove a node or edge
-- The node's **type badge** is a dropdown; the canvas pans, zooms, and drags freely
+- **Double-click an edge** — toggle conjunctive ↔ disjunctive
+- **Left-drag on empty canvas** — marquee multi-select; selected nodes move together
+- **Right-drag** (or **Space**-drag) — pan; scroll to zoom
+- **`Ctrl+D`** — duplicate the selected node · **Delete / Backspace** — remove the selection · **`Esc`** — clear selection / exit a block
+- **`Ctrl+S` / `Ctrl+O` / `Ctrl+N`** — Save / Open / New project
+- The node's **type badge** is a dropdown; the inspector (open a node) edits claim, body, strength, attention, and supports
 
 ## Roadmap
 
-The build order — each step leaves a usable app:
+The build order — each step leaves a usable app.
+
+**v1 — the core tool:**
 
 - [x] **Core model + skeleton-graph canvas** — typed nodes, edges, pan/zoom/drag, persistence
-- [ ] **Peek / inspector panel** — edit claim/body/strength/attention and manage supports, with the skeleton on screen
-- [ ] **Strength colouring + weakest-link propagation + conjunctive/disjunctive edge rendering**
-- [ ] **BibTeX import & refresh** + a source info bar
-- [ ] **Markdown export** — lossless and self-describing, so a fresh LLM conversation can reason over the argument's structure
-- [ ] **Linear / drafting view** + curated ordering
-- [ ] **Provenance / "monoculture of evidence" tools** — source footprint, load counts, single-point-of-failure detection
+- [x] **Peek / inspector panel** — edit claim/body/strength/attention and manage supports, with the skeleton on screen
+- [x] **Strength colouring + weakest-link propagation + conjunctive/disjunctive edge rendering**
+- [x] **BibTeX import & refresh** + a source info bar
+- [x] **Markdown export** — lossless and self-describing, so a fresh LLM conversation can reason over the argument's structure
+- [x] **Linear / drafting view** + curated ordering
+- [x] **Provenance / "monoculture of evidence" tools** — source footprint, load counts, single-point-of-failure detection
+- [x] **Save / Open** `.spine.json` projects + guarded New
+
+**v2 — shaping it to the way the argument is actually built:**
+
+- [x] **Canvas interaction polish** — marquee multi-select, move-together, pan, keyboard shortcuts
+- [x] **Nested argument blocks** (two levels) — drill in/out with a breadcrumb
+- [x] **Cross-level strength bridge** — an inner weak link surfaces on the collapsed block above
+- [x] **Gap / placeholder nodes** — load-bearing gaps break downstream; a terminus gap is a legitimate open ending
+- [x] **Spine vs lateral support** — main thread as a backbone, side supports with a lighter connector
+- [x] **Argument-position roles** — a distinct terminus (any type) and block-output / section-conclusion rendering
+
+**Possible next:** raising the two-level nesting cap, richer export targets, and quality-of-life polish driven by real use.
 
 ## License
 
