@@ -4,11 +4,14 @@ import type { ArgNode, Support } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
 import { gapTypeIds } from "../model/gaps";
 import { derivedTypeIds, framingTypeIds } from "../model/strengthModes";
+import { topoOrderIds } from "../model/order";
+import { childrenOf, edgesAtLevel, blockOutput } from "../model/blocks";
 import { shortLabel } from "../lib/bibtex";
 
-// Linear / drafting view (§4.3): the whole argument top-to-bottom in the curated
-// order, supports inline, read as a document. An occasional global switch — not
-// the side panel. The author reshapes the order here (the "dimension reduction").
+// Linear / drafting view (§4.3, integrated in v3): the whole argument top-to-
+// bottom in the curated order, with each block's inner chain shown beneath it,
+// indented and dimmed so the top-level thread stays dominant. The author reshapes
+// the top-level order here; sub-levels follow their own dependency order.
 export function LinearView() {
   const nodes = useSpine((s) => s.nodes);
   const edges = useSpine((s) => s.edges);
@@ -42,34 +45,68 @@ export function LinearView() {
     return m;
   }, [allSupports]);
 
-  const ordered = linearOrder.map((id) => nodeById.get(id)).filter((n): n is ArgNode => !!n);
+  // The curated top-level sequence: the saved order, plus any new top-level nodes.
+  const topSeq = useMemo(() => {
+    const top = childrenOf(null, nodes);
+    const ids = new Set(top.map((n) => n.id));
+    const seq = linearOrder.filter((id) => ids.has(id));
+    const seen = new Set(seq);
+    for (const n of top) if (!seen.has(n.id)) seq.push(n.id);
+    return seq;
+  }, [nodes, linearOrder]);
 
-  const move = (i: number, dir: -1 | 1) => {
+  // Flatten the tree into ordered rows with a nesting depth: top level in the
+  // curated order, each block's children (in dependency order) right beneath it.
+  const rows = useMemo(() => {
+    const out: { node: ArgNode; depth: number }[] = [];
+    const walk = (depth: number, order: number[]) => {
+      for (const id of order) {
+        const n = nodeById.get(id);
+        if (!n) continue;
+        out.push({ node: n, depth });
+        if (n.is_block) {
+          const kids = childrenOf(n.id, nodes);
+          walk(depth + 1, topoOrderIds(kids, edgesAtLevel(n.id, nodes, edges)));
+        }
+      }
+    };
+    walk(0, topSeq);
+    return out;
+  }, [nodes, edges, nodeById, topSeq]);
+
+  const move = (nodeId: number, dir: -1 | 1) => {
+    const arr = [...topSeq];
+    const i = arr.indexOf(nodeId);
     const j = i + dir;
-    if (j < 0 || j >= linearOrder.length) return;
-    const arr = [...linearOrder];
-    const tmp = arr[i];
-    arr[i] = arr[j];
-    arr[j] = tmp;
+    if (i < 0 || j < 0 || j >= arr.length) return;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
     void setLinearOrder(arr);
   };
 
   const open = (id: number) => focusNode(id);
+  const labelOf = (n: ArgNode) =>
+    (n.is_block ? blockOutput(n.id, nodes, edges)?.claim || n.claim : n.claim) || "(untitled)";
 
   return (
     <div className="linear-view">
-      {ordered.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="linear-empty">No moves yet — add some in the graph view.</div>
       ) : (
         <div className="linear-doc">
-          {ordered.map((n, i) => {
+          {rows.map(({ node: n, depth }) => {
             const eff = effectiveById[n.id] ?? n.strength;
             const sups = supportsByNode.get(n.id) ?? [];
+            const topIndex = depth === 0 ? topSeq.indexOf(n.id) : -1;
             return (
-              <section key={n.id} className="linear-item">
+              <section
+                key={n.id}
+                className={"linear-item" + (depth > 0 ? " linear-item--nested" : "")}
+                style={depth > 0 ? { marginLeft: depth * 26 } : undefined}
+              >
                 <div className="linear-item__bar">
                   <span className={"linear-badge strength-text-" + eff}>
                     {nodeTypeById[n.type_id]?.name ?? "NODE"} · {eff}
+                    {n.is_block ? " ▸" : ""}
                   </span>
                   {n.attention ? (
                     <span className="linear-attention" title="Attention">
@@ -77,25 +114,29 @@ export function LinearView() {
                     </span>
                   ) : null}
                   <span className="linear-item__spacer" />
-                  <button
-                    className="linear-move"
-                    title="Move up"
-                    onClick={() => move(i, -1)}
-                    disabled={i === 0}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    className="linear-move"
-                    title="Move down"
-                    onClick={() => move(i, 1)}
-                    disabled={i === ordered.length - 1}
-                  >
-                    ↓
-                  </button>
+                  {depth === 0 && (
+                    <>
+                      <button
+                        className="linear-move"
+                        title="Move up"
+                        onClick={() => move(n.id, -1)}
+                        disabled={topIndex <= 0}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        className="linear-move"
+                        title="Move down"
+                        onClick={() => move(n.id, 1)}
+                        disabled={topIndex === topSeq.length - 1}
+                      >
+                        ↓
+                      </button>
+                    </>
+                  )}
                 </div>
                 <h3 className="linear-claim" onClick={() => open(n.id)} title="Open in the graph">
-                  {n.claim || "(untitled)"}
+                  {labelOf(n)}
                 </h3>
                 {n.body ? <p className="linear-body">{n.body}</p> : null}
                 {sups.length > 0 && (

@@ -537,11 +537,12 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async ensureLinearOrder() {
-      const { nodes, edges, linearOrder, currentParentId } = get();
-      const levelNodes = nodes.filter((n) => (n.parent_id ?? null) === currentParentId);
+      const { nodes, edges, linearOrder } = get();
+      // The linear view is integrated from the top level (sub-levels follow their
+      // own dependency order), so only the top-level order is curated + persisted.
+      const levelNodes = nodes.filter((n) => (n.parent_id ?? null) === null);
       const levelIds = new Set(levelNodes.map((n) => n.id));
-      const existing = new Set(levelNodes.map((n) => n.id));
-      const kept = linearOrder.filter((id) => existing.has(id));
+      const kept = linearOrder.filter((id) => levelIds.has(id));
       const inKept = new Set(kept);
       const levelEdges = edges.filter((e) => levelIds.has(e.from_id) && levelIds.has(e.to_id));
       const missing = topoOrderIds(levelNodes, levelEdges).filter((id) => !inKept.has(id));

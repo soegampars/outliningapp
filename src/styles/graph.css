@@ -220,6 +220,14 @@
   border-left: 2px solid var(--edge-default);
   padding-left: 14px;
 }
+/* Sub-level (block) rows (v3) — dimmed and set in, so the top-level thread
+   stays dominant while the inner chain is still visible in place. */
+.linear-item--nested {
+  opacity: 0.6;
+}
+.linear-item--nested .linear-claim {
+  font-size: 15px;
+}
 .linear-item__bar {
   display: flex;
   align-items: center;
