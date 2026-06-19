@@ -613,6 +613,41 @@
   font-size: 11px;
   color: var(--text-secondary);
 }
+/* Dissolve-block control (v3) — secondary affordance + two-step confirm. */
+.peek-blockbtn.subtle {
+  margin-top: 6px;
+  background: none;
+  color: var(--text-secondary);
+  border-style: dashed;
+}
+.peek-blockbtn.subtle:hover {
+  color: var(--strength-weak);
+  border-color: var(--strength-weak);
+}
+.peek-confirm {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.peek-confirm__row {
+  display: flex;
+  gap: 6px;
+}
+.peek-confirm__row button {
+  flex: 1;
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--node-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--edge-default);
+}
+.peek-confirm__danger {
+  border-color: var(--strength-weak) !important;
+  color: var(--strength-weak) !important;
+}
 
 /* Citation info line under a linked support (Zotero-style, §3). */
 .peek-cite {

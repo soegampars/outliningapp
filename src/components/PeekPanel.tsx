@@ -30,10 +30,12 @@ export function PeekPanel() {
   const removeSupport = useSpine((s) => s.removeSupport);
   const select = useSpine((s) => s.select);
   const makeBlock = useSpine((s) => s.makeBlock);
+  const dissolveBlock = useSpine((s) => s.dissolveBlock);
   const drillInto = useSpine((s) => s.drillInto);
 
   const [claim, setClaim] = useState("");
   const [body, setBody] = useState("");
+  const [confirmDissolve, setConfirmDissolve] = useState(false);
 
   const gapIds = useMemo(() => gapTypeIds(nodeTypes), [nodeTypes]);
   const effectiveById = useMemo(
@@ -48,6 +50,7 @@ export function PeekPanel() {
   useEffect(() => {
     setClaim(node?.claim ?? "");
     setBody(node?.body ?? "");
+    setConfirmDissolve(false);
   }, [selectedNodeId, node?.claim, node?.body]);
 
   if (!node) return null;
@@ -101,6 +104,29 @@ export function PeekPanel() {
               <span className="peek-blocknote">
                 The claim shown on the canvas mirrors this block's output node.
               </span>
+              {confirmDissolve ? (
+                <div className="peek-confirm">
+                  <span className="peek-blocknote">
+                    Delete the inner chain? The node stays; everything inside it is removed.
+                  </span>
+                  <div className="peek-confirm__row">
+                    <button
+                      className="peek-confirm__danger"
+                      onClick={() => {
+                        void dissolveBlock(nid);
+                        setConfirmDissolve(false);
+                      }}
+                    >
+                      Dissolve
+                    </button>
+                    <button onClick={() => setConfirmDissolve(false)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="peek-blockbtn subtle" onClick={() => setConfirmDissolve(true)}>
+                  Dissolve internal structure
+                </button>
+              )}
             </>
           ) : (
             <button className="peek-blockbtn" onClick={() => void makeBlock(nid)}>

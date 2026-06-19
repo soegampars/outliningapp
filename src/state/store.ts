@@ -3,6 +3,7 @@ import type { ArgNode, Edge, EdgeKind, NodeType, Source, Strength, Support } fro
 import * as repo from "../data/repo";
 import { entryToSource, parseBibtex } from "../lib/bibtex";
 import { topoOrderIds } from "../model/order";
+import { blockOutput } from "../model/blocks";
 import { openProject, parseProject, saveProject, serializeProject } from "../lib/projectFile";
 
 export type ViewMode = "graph" | "linear";
@@ -46,6 +47,7 @@ interface SpineState {
   addNode: (typeId: number, x: number, y: number) => Promise<void>;
   duplicateNode: (id: number) => Promise<void>;
   makeBlock: (id: number) => Promise<void>;
+  dissolveBlock: (id: number) => Promise<void>;
   drillInto: (id: number) => void;
   drillUp: () => void;
   setNodeClaim: (id: number, claim: string) => Promise<void>;
@@ -327,6 +329,46 @@ export const useSpine = create<SpineState>((set, get) => {
       const cur = get().currentParentId;
       const block = cur != null ? get().nodes.find((n) => n.id === cur) : null;
       set({ currentParentId: block?.parent_id ?? null, ...CLEARED_SELECTION });
+    },
+
+    async dissolveBlock(id) {
+      const { nodes, edges } = get();
+      const node = nodes.find((n) => n.id === id);
+      if (!node || !node.is_block) return;
+      // Keep the visible text: the collapsed block mirrors its output's claim.
+      const keepClaim = blockOutput(id, nodes, edges)?.claim ?? node.claim;
+      // Every node nested under this block, at any depth.
+      const descendants = new Set<number>();
+      const collect = (pid: number) => {
+        for (const n of nodes)
+          if (n.parent_id === pid && !descendants.has(n.id)) {
+            descendants.add(n.id);
+            collect(n.id);
+          }
+      };
+      collect(id);
+      // Persist: deleting the direct children cascades to the rest (repo.deleteNode).
+      for (const cid of nodes.filter((n) => n.parent_id === id).map((n) => n.id)) {
+        await repo.deleteNode(cid);
+      }
+      await repo.updateNodeClaim(id, keepClaim);
+      await repo.setNodeIsBlock(id, 0);
+      set((s) => {
+        const insideDissolved =
+          s.currentParentId != null &&
+          (s.currentParentId === id || descendants.has(s.currentParentId));
+        return {
+          nodes: s.nodes
+            .filter((n) => !descendants.has(n.id))
+            .map((n) => (n.id === id ? { ...n, is_block: 0, claim: keepClaim } : n)),
+          edges: s.edges.filter(
+            (e) => !descendants.has(e.from_id) && !descendants.has(e.to_id),
+          ),
+          linearOrder: s.linearOrder.filter((nid) => !descendants.has(nid)),
+          currentParentId: insideDissolved ? (node.parent_id ?? null) : s.currentParentId,
+          ...CLEARED_SELECTION,
+        };
+      });
     },
 
     async setNodeClaim(id, claim) {

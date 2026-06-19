@@ -238,6 +238,16 @@ export async function makeBlock(node: ArgNode): Promise<number> {
   });
 }
 
+// Flip a node's block flag. Used to dissolve a block back into a plain node
+// (the caller deletes the children first). See store.dissolveBlock.
+export async function setNodeIsBlock(id: number, isBlock: number): Promise<void> {
+  const db = await conn();
+  await db.execute("UPDATE node SET is_block = $1, updated_at = datetime('now') WHERE id = $2", [
+    isBlock,
+    id,
+  ]);
+}
+
 // Import-only, refresh-by-stable-key (concept §3, §6.5): match on citekey and
 // update the record in place, never creating a duplicate. The canonical library
 // stays in Zotero.

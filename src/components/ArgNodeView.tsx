@@ -58,6 +58,14 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
         : d.positionRole === "section"
           ? "section"
           : null;
+  const roleTitle =
+    d.positionRole === "terminus"
+      ? "Terminus — where the argument lands. Can be any type, including an open question."
+      : d.positionRole === "output"
+        ? "Block output — the conclusion this block shows one level up."
+        : d.positionRole === "section"
+          ? "Section conclusion — an intermediate conclusion on the main thread, not the final terminus."
+          : undefined;
   const cls =
     `spine-node strength-${d.effective}` +
     (selected ? " selected" : "") +
@@ -90,7 +98,11 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
           </span>
         ) : null}
         {d.attention ? <span className="spine-node__attention" title="Needs attention" /> : null}
-        {roleLabel ? <span className="spine-node__role">{roleLabel}</span> : null}
+        {roleLabel ? (
+          <span className="spine-node__role" title={roleTitle}>
+            {roleLabel}
+          </span>
+        ) : null}
       </div>
 
       {editing && !d.isBlock ? (

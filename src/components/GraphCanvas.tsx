@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import {
   Background,
@@ -43,7 +43,60 @@ export function GraphCanvas() {
   const setEditing = useSpine((s) => s.setEditing);
   const drillInto = useSpine((s) => s.drillInto);
 
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
+  // fitView's identity from useReactFlow isn't stable, so hold it in a ref and
+  // keep effect deps free of it (listing it warns + churns React Flow's fit queue).
+  const fitViewRef = useRef(fitView);
+  fitViewRef.current = fitView;
+
+  // Re-centre when drilling between levels (the canvas doesn't remount, so a
+  // fresh fit is needed). Poll until the DOM shows exactly this level's nodes,
+  // measured (ResizeObserver lags the DOM), then fit once — fitting before the
+  // store swap or before measurement lands on the wrong/empty set.
+  useEffect(() => {
+    const want = new Set(
+      useSpine
+        .getState()
+        .nodes.filter((n) => (n.parent_id ?? null) === currentParentId)
+        .map((n) => String(n.id)),
+    );
+    if (want.size === 0) return;
+    let raf = 0;
+    let tries = 0;
+    let fits = 0;
+    const tick = () => {
+      const els = Array.from(document.querySelectorAll<HTMLElement>(".react-flow__node"));
+      const ids = els.map((e) => e.getAttribute("data-id"));
+      const ready =
+        ids.length === want.size &&
+        ids.every((id) => id != null && want.has(id)) &&
+        els[0]?.offsetWidth > 0;
+      if (ready) {
+        // Fit each frame for a short window: React Flow's measurement lags the
+        // DOM, so the later (measured) calls land on the right place.
+        fitViewRef.current({ duration: 0, padding: 0.2 });
+        if (++fits < 12) raf = requestAnimationFrame(tick);
+        return;
+      }
+      if (++tries < 60) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [currentParentId]);
+
+  // Re-centre on window resize (nodes already measured, so fit next frame).
+  useEffect(() => {
+    let raf = 0;
+    const onResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => fitViewRef.current({ duration: 150, padding: 0.2 }));
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // Only the current level is shown; edges whose endpoints are both at this level.
   const visibleNodes = useMemo(
