@@ -16,8 +16,7 @@ export function LinearView() {
   const nodeTypeById = useSpine((s) => s.nodeTypeById);
   const sourceById = useSpine((s) => s.sourceById);
   const setLinearOrder = useSpine((s) => s.setLinearOrder);
-  const select = useSpine((s) => s.select);
-  const setView = useSpine((s) => s.setView);
+  const focusNode = useSpine((s) => s.focusNode);
 
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const gapIds = useMemo(() => gapTypeIds(nodeTypeById), [nodeTypeById]);
@@ -47,10 +46,7 @@ export function LinearView() {
     void setLinearOrder(arr);
   };
 
-  const open = (id: number) => {
-    select(id, null);
-    setView("graph");
-  };
+  const open = (id: number) => focusNode(id);
 
   return (
     <div className="linear-view">

@@ -15,7 +15,9 @@ export function edgesAtLevel(parentId: number | null, nodes: ArgNode[], edges: E
 }
 
 // A block's output = its conclusion: the child with no outgoing internal edge
-// (the sink). On ties or none, fall back to the most-recently-created child.
+// (the sink). When several children qualify (e.g. a newly added, not-yet-wired
+// node), keep the OLDEST — which is the node seeded when the block was built — so
+// the output stays put instead of jumping to whatever was added last.
 export function blockOutput(blockId: number, nodes: ArgNode[], edges: Edge[]): ArgNode | null {
   const kids = nodes.filter((n) => n.parent_id === blockId);
   if (kids.length === 0) return null;
@@ -25,5 +27,5 @@ export function blockOutput(blockId: number, nodes: ArgNode[], edges: Edge[]): A
   );
   const sinks = kids.filter((k) => !hasOutgoing.has(k.id));
   const pool = sinks.length ? sinks : kids;
-  return pool.reduce((a, b) => (b.id > a.id ? b : a));
+  return pool.reduce((a, b) => (b.id < a.id ? b : a));
 }

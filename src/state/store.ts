@@ -69,6 +69,7 @@ interface SpineState {
   setLinearOrder: (ids: number[]) => Promise<void>;
   select: (nodeId: number | null, edgeId: number | null) => void;
   setSelection: (nodeIds: number[], edgeIds: number[]) => void;
+  focusNode: (id: number) => void;
   setEditing: (id: number | null) => void;
   toggleSources: () => void;
   focusSource: (id: number | null) => void;
@@ -501,7 +502,28 @@ export const useSpine = create<SpineState>((set, get) => {
       });
     },
 
+    focusNode(id) {
+      // Open a node in the graph from elsewhere (e.g. the linear view): switch to
+      // the level it lives on so it is actually visible, then select it.
+      const n = get().nodes.find((x) => x.id === id);
+      set({
+        view: "graph",
+        currentParentId: n?.parent_id ?? null,
+        sourcesOpen: false,
+        selectedNodeId: id,
+        selectedEdgeId: null,
+        selectedNodeIds: [id],
+        selectedEdgeIds: [],
+      });
+    },
+
     setSelection(nodeIds, edgeIds) {
+      // Value-stable: if the selection is unchanged, keep the existing array refs
+      // so downstream memos (and React Flow's controlled nodes) don't churn.
+      const s = get();
+      const sameSet = (a: number[], b: number[]) =>
+        a.length === b.length && a.every((id) => b.includes(id));
+      if (sameSet(nodeIds, s.selectedNodeIds) && sameSet(edgeIds, s.selectedEdgeIds)) return;
       set({
         selectedNodeIds: nodeIds,
         selectedEdgeIds: edgeIds,
