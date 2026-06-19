@@ -7,10 +7,10 @@ import {
   ReactFlow,
   useReactFlow,
   type Edge as RFEdge,
+  type EdgeChange,
   type Node as RFNode,
   type NodeChange,
   type OnConnect,
-  type OnSelectionChangeParams,
 } from "@xyflow/react";
 import { useSpine } from "../state/store";
 import { computeEffectiveStrength } from "../model/strength";
@@ -24,7 +24,6 @@ const nodeTypes = { arg: ArgNodeView };
 // React Flow's internal prop-sync churn.
 const PRO_OPTIONS = { hideAttribution: true };
 const PAN_ON_DRAG = [1, 2];
-const noop = () => {};
 
 export function GraphCanvas() {
   const nodes = useSpine((s) => s.nodes);
@@ -177,34 +176,44 @@ export function GraphCanvas() {
     [visibleEdges, selectedEdgeSet, spine, lateral],
   );
 
+  // Selection is synced from React Flow's own change stream (onNodesChange /
+  // onEdgesChange) — these fire as a discrete, in-click event. The deferred
+  // onSelectionChange fires a frame late, so our controlled `selected` would
+  // re-apply stale (unselected) nodes and clobber RF's instant selection, making
+  // a click appear to do nothing until the next interaction.
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      const st = useSpine.getState();
+      const sel = new Set(st.selectedNodeIds);
+      let selChanged = false;
       for (const c of changes) {
         if (c.type === "position") {
           if (c.position) moveNodeLocal(Number(c.id), c.position.x, c.position.y);
           if (c.dragging === false) void persistNodePosition(Number(c.id));
+        } else if (c.type === "select") {
+          selChanged = true;
+          if (c.selected) sel.add(Number(c.id));
+          else sel.delete(Number(c.id));
         }
       }
+      if (selChanged) setSelection([...sel], st.selectedEdgeIds);
     },
-    [moveNodeLocal, persistNodePosition],
+    [moveNodeLocal, persistNodePosition, setSelection],
   );
 
-  const onSelectionChange = useCallback(
-    (p: OnSelectionChangeParams) => {
-      const nodeIds = p.nodes.map((n) => Number(n.id));
-      const edgeIds = p.edges.map((e) => Number(e.id));
-      // React Flow emits a transient empty selection while it reconciles our
-      // controlled nodes (e.g. on a fresh mount that already has a selection).
-      // Writing that empty back clears the store, which makes RF re-apply and
-      // re-emit, oscillating forever (a crash on mount, a render-commit lag in
-      // place). Deliberate clears go through onPaneClick / Esc, so ignore empties
-      // here and skip echoing an unchanged selection.
-      if (nodeIds.length === 0 && edgeIds.length === 0) return;
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
       const st = useSpine.getState();
-      const same = (a: number[], b: number[]) =>
-        a.length === b.length && a.every((id) => b.includes(id));
-      if (same(nodeIds, st.selectedNodeIds) && same(edgeIds, st.selectedEdgeIds)) return;
-      setSelection(nodeIds, edgeIds);
+      const sel = new Set(st.selectedEdgeIds);
+      let selChanged = false;
+      for (const c of changes) {
+        if (c.type === "select") {
+          selChanged = true;
+          if (c.selected) sel.add(Number(c.id));
+          else sel.delete(Number(c.id));
+        }
+      }
+      if (selChanged) setSelection(st.selectedNodeIds, [...sel]);
     },
     [setSelection],
   );
@@ -255,11 +264,10 @@ export function GraphCanvas() {
         edges={rfEdges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
-        onEdgesChange={noop}
+        onEdgesChange={onEdgesChange}
         onNodeDoubleClick={onNodeDoubleClick}
         onEdgeDoubleClick={onEdgeDoubleClick}
         onConnect={onConnect}
-        onSelectionChange={onSelectionChange}
         onPaneClick={onPaneClick}
         colorMode="dark"
         zoomOnDoubleClick={false}
