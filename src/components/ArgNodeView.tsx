@@ -14,6 +14,7 @@ export interface ArgNodeData {
   isBlock: boolean;
   spineRole?: "spine" | "lateral" | null;
   positionRole?: "terminus" | "output" | "section" | null;
+  parked?: boolean;
   [key: string]: unknown;
 }
 
@@ -73,7 +74,8 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
     (isGap ? " spine-node--gap" : "") +
     (d.spineRole === "spine" ? " spine-node--onspine" : "") +
     (d.spineRole === "lateral" ? " spine-node--lateral" : "") +
-    (d.positionRole ? " spine-node--" + d.positionRole : "");
+    (d.positionRole ? " spine-node--" + d.positionRole : "") +
+    (d.parked ? " spine-node--parked" : "");
 
   return (
     <div className={cls}>
@@ -101,6 +103,14 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
         {roleLabel ? (
           <span className="spine-node__role" title={roleTitle}>
             {roleLabel}
+          </span>
+        ) : null}
+        {d.parked ? (
+          <span
+            className="spine-node__role spine-node__park"
+            title="Parked placeholder — something you know you need but haven't placed yet. Connect it into the argument (or change its type) to bring it in."
+          >
+            📌 parked
           </span>
         ) : null}
       </div>

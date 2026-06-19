@@ -60,6 +60,7 @@ export function PeekPanel() {
   const feeders = edges.filter((e) => e.to_id === nid);
   const dependents = edges.filter((e) => e.from_id === nid);
   const isGapNode = isGapTypeName(nodeTypeById[node.type_id]?.name);
+  const isParked = isGapNode && feeders.length === 0 && dependents.length === 0;
   const nodeById = (id: number) => nodes.find((n) => n.id === id);
   const typeName = (id: number) => {
     const n = nodeById(id);
@@ -177,13 +178,19 @@ export function PeekPanel() {
             feeders
           </div>
         )}
-        {isGapNode && (
-          <div className={"peek-gapnote " + (dependents.length ? "broken" : "open")}>
-            {dependents.length
-              ? "Load-bearing gap — everything resting on it reads as broken until you fill it."
-              : "Terminus gap — a legitimate open ending; it is not flagged as a defect."}
-          </div>
-        )}
+        {isGapNode &&
+          (isParked ? (
+            <div className="peek-gapnote open">
+              Parked placeholder — something you know you need but haven't placed yet. Connect it
+              into the argument (or change its type) to bring it in.
+            </div>
+          ) : (
+            <div className={"peek-gapnote " + (dependents.length ? "broken" : "open")}>
+              {dependents.length
+                ? "Load-bearing gap — everything resting on it reads as broken until you fill it."
+                : "Terminus gap — a legitimate open ending; it is not flagged as a defect."}
+            </div>
+          ))}
       </div>
 
       <div className="peek-section">

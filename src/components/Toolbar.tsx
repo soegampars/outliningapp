@@ -29,6 +29,18 @@ export function Toolbar() {
     void addNode(def.id, p.x - 80, p.y - 28);
   };
 
+  // A parking-lot gap: a placeholder you know you need but haven't placed yet.
+  const onAddGap = () => {
+    const up = (s: string) => s.trim().toUpperCase();
+    const gap =
+      nodeTypes.find((t) => up(t.name) === "OPEN GAP") ??
+      nodeTypes.find((t) => up(t.name) === "GAP") ??
+      nodeTypes.find((t) => up(t.name) === "QUESTION");
+    if (!gap) return;
+    const p = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+    void addNode(gap.id, p.x - 80, p.y - 28);
+  };
+
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -65,6 +77,15 @@ export function Toolbar() {
       {view === "graph" && (
         <button className="spine-btn" onClick={onAdd}>
           + Add node
+        </button>
+      )}
+      {view === "graph" && (
+        <button
+          className="spine-btn"
+          onClick={onAddGap}
+          title="Add a parking-lot gap: a placeholder for something you know you need but haven't placed yet"
+        >
+          + Gap
         </button>
       )}
       <button className="spine-btn" onClick={() => fileRef.current?.click()}>

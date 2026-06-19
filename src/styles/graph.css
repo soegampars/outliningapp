@@ -495,6 +495,16 @@
   border-bottom: 1px dashed var(--text-secondary);
 }
 
+/* Parking-lot gap (v3) — a placeholder you know you need but haven't placed yet.
+   A sticky-note look sets it clearly apart from a developing argument node. */
+.spine-node--parked {
+  border: 1px dashed var(--strength-unfinished);
+  background-color: rgba(230, 200, 90, 0.09);
+}
+.spine-node__park {
+  color: var(--strength-unfinished) !important;
+}
+
 /* Spine vs lateral support (v2-E). The backbone reads solid; lateral supports
    recede so the main thread is obvious at a glance in a long spine. */
 .spine-node--onspine {

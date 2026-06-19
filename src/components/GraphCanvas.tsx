@@ -109,6 +109,16 @@ export function GraphCanvas() {
     [edges, visibleNodeIds],
   );
 
+  // Nodes that have at least one edge anywhere — used to spot parked gaps.
+  const connectedIds = useMemo(() => {
+    const s = new Set<number>();
+    for (const e of edges) {
+      s.add(e.from_id);
+      s.add(e.to_id);
+    }
+    return s;
+  }, [edges]);
+
   // Computed over the whole graph so blocks surface their bridged inner strength.
   const gapIds = useMemo(() => gapTypeIds(allTypes), [allTypes]);
   const effectiveById = useMemo(
@@ -120,21 +130,29 @@ export function GraphCanvas() {
   const { spine, lateral, terminusId } = useMemo(() => {
     const orderIndex = new Map<number, number>();
     linearOrder.forEach((id, i) => orderIndex.set(id, i));
+    // Only connected nodes can be the terminus — a detached parking-lot gap is
+    // not part of any spine and must never be picked as where the argument lands.
+    const connectedAtLevel = new Set<number>();
+    for (const e of visibleEdges) {
+      connectedAtLevel.add(e.from_id);
+      connectedAtLevel.add(e.to_id);
+    }
     let terminusId: number | null = null;
     if (currentParentId != null) {
       terminusId = blockOutput(currentParentId, nodes, edges)?.id ?? null;
     } else {
       for (let i = linearOrder.length - 1; i >= 0; i--) {
-        if (visibleNodeIds.has(linearOrder[i])) {
-          terminusId = linearOrder[i];
+        const id = linearOrder[i];
+        if (visibleNodeIds.has(id) && connectedAtLevel.has(id)) {
+          terminusId = id;
           break;
         }
       }
     }
     if (terminusId == null) {
       const hasOut = new Set(visibleEdges.map((e) => e.from_id));
-      const sinks = visibleNodes.filter((n) => !hasOut.has(n.id));
-      terminusId = (sinks[sinks.length - 1] ?? visibleNodes[visibleNodes.length - 1])?.id ?? null;
+      const sinks = visibleNodes.filter((n) => connectedAtLevel.has(n.id) && !hasOut.has(n.id));
+      terminusId = sinks[sinks.length - 1]?.id ?? null;
     }
     const cls = classifySpine(visibleNodes, visibleEdges, terminusId, orderIndex);
     return { spine: cls.spine, lateral: cls.lateral, terminusId };
@@ -192,6 +210,7 @@ export function GraphCanvas() {
             isBlock,
             spineRole: spine.has(n.id) ? "spine" : lateral.has(n.id) ? "lateral" : null,
             positionRole,
+            parked: gapIds.has(n.type_id) && !connectedIds.has(n.id),
           },
         };
       }),
@@ -208,6 +227,8 @@ export function GraphCanvas() {
       outputId,
       currentParentId,
       conclusionTypeIds,
+      gapIds,
+      connectedIds,
     ],
   );
 
