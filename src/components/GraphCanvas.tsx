@@ -15,6 +15,7 @@ import {
 import { useSpine } from "../state/store";
 import { computeEffectiveStrength } from "../model/strength";
 import { gapTypeIds } from "../model/gaps";
+import { derivedTypeIds, framingTypeIds } from "../model/strengthModes";
 import { classifySpine } from "../model/spine";
 import { blockOutput } from "../model/blocks";
 import { ArgNodeView } from "./ArgNodeView";
@@ -121,9 +122,13 @@ export function GraphCanvas() {
 
   // Computed over the whole graph so blocks surface their bridged inner strength.
   const gapIds = useMemo(() => gapTypeIds(allTypes), [allTypes]);
+  const typeModes = useMemo(
+    () => ({ gap: gapIds, derived: derivedTypeIds(allTypes), framing: framingTypeIds(allTypes) }),
+    [gapIds, allTypes],
+  );
   const effectiveById = useMemo(
-    () => computeEffectiveStrength(nodes, edges, gapIds),
-    [nodes, edges, gapIds],
+    () => computeEffectiveStrength(nodes, edges, typeModes),
+    [nodes, edges, typeModes],
   );
 
   // Spine vs lateral support (v2-E), derived from the curated order + edges.

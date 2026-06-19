@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useSpine } from "../state/store";
 import { isGapTypeName } from "../model/gaps";
+import { strengthMode } from "../model/strengthModes";
 import type { Strength } from "../model/types";
 
 // Data carried on each React Flow node. Derived from the model in GraphCanvas;
@@ -50,7 +51,9 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
   };
   const cancel = () => setEditing(null);
 
-  const isGap = isGapTypeName(nodeTypes.find((t) => t.id === d.typeId)?.name);
+  const typeName = nodeTypes.find((t) => t.id === d.typeId)?.name;
+  const isGap = isGapTypeName(typeName);
+  const isFraming = strengthMode(typeName) === "framing";
   const roleLabel =
     d.positionRole === "terminus"
       ? "lands here"
@@ -75,7 +78,8 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
     (d.spineRole === "spine" ? " spine-node--onspine" : "") +
     (d.spineRole === "lateral" ? " spine-node--lateral" : "") +
     (d.positionRole ? " spine-node--" + d.positionRole : "") +
-    (d.parked ? " spine-node--parked" : "");
+    (d.parked ? " spine-node--parked" : "") +
+    (isFraming ? " spine-node--framing" : "");
 
   return (
     <div className={cls}>
@@ -111,6 +115,14 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
             title="Parked placeholder — something you know you need but haven't placed yet. Connect it into the argument (or change its type) to bring it in."
           >
             📌 parked
+          </span>
+        ) : null}
+        {isFraming && !d.parked ? (
+          <span
+            className="spine-node__role spine-node__framemark"
+            title="Problem framing — judged on its own basis; its strength does not propagate into the chain that builds on it."
+          >
+            framing
           </span>
         ) : null}
       </div>

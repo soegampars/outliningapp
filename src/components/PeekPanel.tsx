@@ -3,6 +3,7 @@ import { useSpine } from "../state/store";
 import { STRENGTHS, type ArgNode } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
 import { gapTypeIds, isGapTypeName } from "../model/gaps";
+import { strengthMode, derivedTypeIds, framingTypeIds, framingLabel } from "../model/strengthModes";
 import { shortLabel } from "../lib/bibtex";
 
 // The minute-to-minute inspector (§4.2). Opens beside the canvas — the skeleton
@@ -37,10 +38,17 @@ export function PeekPanel() {
   const [body, setBody] = useState("");
   const [confirmDissolve, setConfirmDissolve] = useState(false);
 
-  const gapIds = useMemo(() => gapTypeIds(nodeTypes), [nodeTypes]);
+  const typeModes = useMemo(
+    () => ({
+      gap: gapTypeIds(nodeTypes),
+      derived: derivedTypeIds(nodeTypes),
+      framing: framingTypeIds(nodeTypes),
+    }),
+    [nodeTypes],
+  );
   const effectiveById = useMemo(
-    () => computeEffectiveStrength(nodes, edges, gapIds),
-    [nodes, edges, gapIds],
+    () => computeEffectiveStrength(nodes, edges, typeModes),
+    [nodes, edges, typeModes],
   );
   const supports = useMemo(
     () => allSupports.filter((s) => s.node_id === selectedNodeId),
@@ -61,6 +69,7 @@ export function PeekPanel() {
   const dependents = edges.filter((e) => e.from_id === nid);
   const isGapNode = isGapTypeName(nodeTypeById[node.type_id]?.name);
   const isParked = isGapNode && feeders.length === 0 && dependents.length === 0;
+  const mode = strengthMode(nodeTypeById[node.type_id]?.name);
   // 3-layer cap: only nodes at depth 0-1 may own a sub-canvas.
   const depth = (() => {
     const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -173,23 +182,41 @@ export function PeekPanel() {
       </div>
 
       <div className="peek-section">
-        <label className="peek-section__label">Strength</label>
-        <div className="peek-strength">
-          {STRENGTHS.map((s) => (
-            <button
-              key={s}
-              className={node.strength === s ? "active " + s : ""}
-              onClick={() => void setNodeStrength(nid, s)}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        {effective !== node.strength && (
+        <label className="peek-section__label">
+          Strength{mode === "framing" ? " — framing" : ""}
+        </label>
+        {mode === "derived" ? (
           <div className="peek-effective">
-            Effective: <b className={"eff-" + effective}>{effective}</b> — weakest link through its
-            feeders
+            Derived from its premises: <b className={"eff-" + effective}>{effective}</b>. This type
+            takes its strength from what feeds it — strengthen the premises to strengthen this.
           </div>
+        ) : (
+          <>
+            <div className="peek-strength">
+              {STRENGTHS.map((s) => (
+                <button
+                  key={s}
+                  className={node.strength === s ? "active " + s : ""}
+                  onClick={() => void setNodeStrength(nid, s)}
+                >
+                  {mode === "framing" ? framingLabel(s) : s}
+                </button>
+              ))}
+            </div>
+            {mode === "framing" ? (
+              <div className="peek-blocknote">
+                Judged on its own basis — a framing's strength is not propagated into the chain that
+                builds on it.
+              </div>
+            ) : (
+              effective !== node.strength && (
+                <div className="peek-effective">
+                  Effective: <b className={"eff-" + effective}>{effective}</b> — weakest link through
+                  its feeders
+                </div>
+              )
+            )}
+          </>
         )}
         {isGapNode &&
           (isParked ? (

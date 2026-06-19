@@ -16,6 +16,7 @@ function propagateLevel(
   levelNodes: ArgNode[],
   edges: Edge[],
   baseRank: (id: number) => number,
+  skipFeeder?: (fromId: number) => boolean,
 ): Map<number, number> {
   const ids = new Set(levelNodes.map((n) => n.id));
   const feedersByTarget = new Map<number, Edge[]>();
@@ -38,6 +39,8 @@ function propagateLevel(
     const conjunctive: number[] = [];
     const disjunctive: number[] = [];
     for (const e of feeders) {
+      // Framing feeders don't impose a cap — their quality is judged separately.
+      if (skipFeeder && skipFeeder(e.from_id)) continue;
       const v = eff(e.from_id);
       if (e.kind === "disjunctive") disjunctive.push(v);
       else conjunctive.push(v);
@@ -58,24 +61,40 @@ function propagateLevel(
   return out;
 }
 
-const NO_GAPS: Set<number> = new Set();
+const EMPTY: Set<number> = new Set();
+
+// The type-mode sets that shape strength (concept v3): gap holes, `derived` types
+// whose strength comes only from their premises, and `framing` types judged on a
+// separate basis that do not propagate their weakness.
+export interface TypeModes {
+  gap?: Set<number>;
+  derived?: Set<number>;
+  framing?: Set<number>;
+}
 
 // Effective (propagated) strength for every node, bridging block boundaries
-// (concept §3 + v2-C) and accounting for gaps (v2-D). A block's effective = its
-// output node's effective within the block, capped by the block's own strength;
-// that surfaces on the collapsed block and propagates onward at the parent level.
+// (concept §3 + v2-C) and accounting for gaps (v2-D) and type modes (v3).
 //
-// `gapTypeIds` marks the hole types (Gap / Open gap / Question). A gap with
-// downstream dependents is forced to broken (maximally weak) and poisons whatever
-// rests on it; a gap with no dependents is the spine terminus — a legitimate open
-// ending — and keeps its own strength untouched.
+// - gap with downstream dependents -> broken (poisons what rests on it); a gap
+//   with none is a legitimate open ending and keeps its own strength.
+// - derived type (conclusion/implication) -> strength is the weakest of its
+//   (non-framing) premises; with no premise support it reads unfinished.
+// - framing type -> keeps its own strength and does NOT cap what builds on it.
 export function computeEffectiveStrength(
   nodes: ArgNode[],
   edges: Edge[],
-  gapTypeIds: Set<number> = NO_GAPS,
+  modes: TypeModes = {},
 ): Record<number, Strength> {
+  const gapTypeIds = modes.gap ?? EMPTY;
+  const derivedTypeIds = modes.derived ?? EMPTY;
+  const framingTypeIds = modes.framing ?? EMPTY;
+
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const own = (n: ArgNode) => RANK[n.strength];
+  const isFraming = (id: number) => {
+    const n = byId.get(id);
+    return !!n && framingTypeIds.has(n.type_id);
+  };
 
   const childrenByParent = new Map<number | null, ArgNode[]>();
   for (const n of nodes) {
@@ -88,18 +107,21 @@ export function computeEffectiveStrength(
   // Out-edges = downstream dependents (edges are scoped to one level, so a node's
   // out-degree counts dependents at its own level; a block's counts at its level).
   const outDeg = new Map<number, number>();
-  for (const e of edges) outDeg.set(e.from_id, (outDeg.get(e.from_id) ?? 0) + 1);
+  // In-degree counting only real (non-framing) support, for derived nodes.
+  const supportInDeg = new Map<number, number>();
+  for (const e of edges) {
+    outDeg.set(e.from_id, (outDeg.get(e.from_id) ?? 0) + 1);
+    if (!isFraming(e.from_id)) supportInDeg.set(e.to_id, (supportInDeg.get(e.to_id) ?? 0) + 1);
+  }
   const hasDependents = (id: number) => (outDeg.get(id) ?? 0) > 0;
+  const hasSupport = (id: number) => (supportInDeg.get(id) ?? 0) > 0;
   const isGap = (n: ArgNode) => gapTypeIds.has(n.type_id);
 
   const result = new Map<number, number>();
   const computed = new Set<number | null>();
 
   // Recursively propagate each level (top, then each block's inner level), so an
-  // inner weak link bridges up through any depth (capped to 3 by the UI). A node's
-  // baseline: a block contributes its inner output's effective (capped by its own,
-  // broken if that output is a load-bearing gap); a load-bearing gap contributes
-  // broken; everything else its own strength.
+  // inner weak link bridges up through any depth (capped to 3 by the UI).
   const computeLevel = (parentId: number | null) => {
     if (computed.has(parentId)) return;
     computed.add(parentId);
@@ -114,9 +136,13 @@ export function computeEffectiveStrength(
         if (output && isGap(output) && hasDependents(n.id)) outRank = 0;
         return Math.min(own(n), outRank);
       }
+      if (framingTypeIds.has(n.type_id)) return own(n);
+      // Derived: own strength is ignored — the weakest premise governs (computed
+      // by propagateLevel from feeders); with no real support, it's a stub.
+      if (derivedTypeIds.has(n.type_id)) return hasSupport(id) ? RANK.strong : RANK.unfinished;
       return isGap(n) && hasDependents(id) ? 0 : own(n);
     };
-    const eff = propagateLevel(levelNodes, edges, baseRank);
+    const eff = propagateLevel(levelNodes, edges, baseRank, isFraming);
     for (const [id, r] of eff) result.set(id, r);
   };
 

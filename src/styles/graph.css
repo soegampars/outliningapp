@@ -505,6 +505,15 @@
   color: var(--strength-unfinished) !important;
 }
 
+/* Problem-framing node (v3) — judged on its own basis. A dotted strength accent
+   sets it apart while still carrying its (framing-scale) strength colour. */
+.spine-node--framing {
+  border-left-style: dotted;
+}
+.spine-node__framemark {
+  color: var(--support-citation) !important;
+}
+
 /* Spine vs lateral support (v2-E). The backbone reads solid; lateral supports
    recede so the main thread is obvious at a glance in a long spine. */
 .spine-node--onspine {

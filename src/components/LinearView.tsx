@@ -3,6 +3,7 @@ import { useSpine } from "../state/store";
 import type { ArgNode, Support } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
 import { gapTypeIds } from "../model/gaps";
+import { derivedTypeIds, framingTypeIds } from "../model/strengthModes";
 import { shortLabel } from "../lib/bibtex";
 
 // Linear / drafting view (§4.3): the whole argument top-to-bottom in the curated
@@ -19,10 +20,17 @@ export function LinearView() {
   const focusNode = useSpine((s) => s.focusNode);
 
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
-  const gapIds = useMemo(() => gapTypeIds(nodeTypeById), [nodeTypeById]);
+  const typeModes = useMemo(
+    () => ({
+      gap: gapTypeIds(nodeTypeById),
+      derived: derivedTypeIds(nodeTypeById),
+      framing: framingTypeIds(nodeTypeById),
+    }),
+    [nodeTypeById],
+  );
   const effectiveById = useMemo(
-    () => computeEffectiveStrength(nodes, edges, gapIds),
-    [nodes, edges, gapIds],
+    () => computeEffectiveStrength(nodes, edges, typeModes),
+    [nodes, edges, typeModes],
   );
   const supportsByNode = useMemo(() => {
     const m = new Map<number, Support[]>();

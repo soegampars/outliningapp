@@ -5,6 +5,7 @@ import type { Db } from "./types";
 // ('structural' shown on the canvas, 'aside' hidden). Everything seeds as
 // structural per §6.1's default; the user reassigns as they wish.
 export const DEFAULT_NODE_TYPES: { name: string; role: "structural" | "aside" }[] = [
+  { name: "PROBLEM FRAMING", role: "structural" },
   { name: "PREMISE", role: "structural" },
   { name: "TENSION", role: "structural" },
   { name: "REDUCTIO", role: "structural" },
@@ -101,14 +102,16 @@ export async function initSchema(db: Db): Promise<void> {
     await db.execute("ALTER TABLE node ADD COLUMN is_block INTEGER NOT NULL DEFAULT 0");
   }
 
-  const rows = await db.select<{ n: number }>(`SELECT COUNT(*) AS n FROM node_type`);
-  if (Number(rows[0]?.n ?? 0) === 0) {
-    let i = 0;
-    for (const t of DEFAULT_NODE_TYPES) {
-      await db.execute(
-        `INSERT INTO node_type (name, role, sort_order, builtin) VALUES ($1, $2, $3, 1)`,
-        [t.name, t.role, i++],
-      );
-    }
+  // Seed the built-in types, and add any that a pre-existing database is missing
+  // (e.g. PROBLEM FRAMING, added in v3) — matched by their unique name.
+  const existingTypes = await db.select<{ name: string }>(`SELECT name FROM node_type`);
+  const haveTypes = new Set(existingTypes.map((r) => r.name));
+  let nextOrder = existingTypes.length;
+  for (const t of DEFAULT_NODE_TYPES) {
+    if (haveTypes.has(t.name)) continue;
+    await db.execute(
+      `INSERT INTO node_type (name, role, sort_order, builtin) VALUES ($1, $2, $3, 1)`,
+      [t.name, t.role, nextOrder++],
+    );
   }
 }
