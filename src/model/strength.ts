@@ -77,48 +77,50 @@ export function computeEffectiveStrength(
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const own = (n: ArgNode) => RANK[n.strength];
 
+  const childrenByParent = new Map<number | null, ArgNode[]>();
+  for (const n of nodes) {
+    const p = n.parent_id ?? null;
+    const a = childrenByParent.get(p);
+    if (a) a.push(n);
+    else childrenByParent.set(p, [n]);
+  }
+
   // Out-edges = downstream dependents (edges are scoped to one level, so a node's
-  // out-degree counts dependents at its own level; a block's counts at the top).
+  // out-degree counts dependents at its own level; a block's counts at its level).
   const outDeg = new Map<number, number>();
   for (const e of edges) outDeg.set(e.from_id, (outDeg.get(e.from_id) ?? 0) + 1);
   const hasDependents = (id: number) => (outDeg.get(id) ?? 0) > 0;
   const isGap = (n: ArgNode) => gapTypeIds.has(n.type_id);
 
-  // Baseline contribution of a node at its own level: a load-bearing gap is
-  // forced to broken (0); everything else contributes its own strength.
-  const baseOf = (id: number) => {
-    const n = byId.get(id);
-    if (!n) return 1;
-    return isGap(n) && hasDependents(id) ? 0 : own(n);
+  const result = new Map<number, number>();
+  const computed = new Set<number | null>();
+
+  // Recursively propagate each level (top, then each block's inner level), so an
+  // inner weak link bridges up through any depth (capped to 3 by the UI). A node's
+  // baseline: a block contributes its inner output's effective (capped by its own,
+  // broken if that output is a load-bearing gap); a load-bearing gap contributes
+  // broken; everything else its own strength.
+  const computeLevel = (parentId: number | null) => {
+    if (computed.has(parentId)) return;
+    computed.add(parentId);
+    const levelNodes = childrenByParent.get(parentId) ?? [];
+    const baseRank = (id: number): number => {
+      const n = byId.get(id);
+      if (!n) return 1;
+      if (n.is_block) {
+        computeLevel(n.id);
+        const output = blockOutput(n.id, nodes, edges);
+        let outRank = output ? (result.get(output.id) ?? own(output)) : own(n);
+        if (output && isGap(output) && hasDependents(n.id)) outRank = 0;
+        return Math.min(own(n), outRank);
+      }
+      return isGap(n) && hasDependents(id) ? 0 : own(n);
+    };
+    const eff = propagateLevel(levelNodes, edges, baseRank);
+    for (const [id, r] of eff) result.set(id, r);
   };
 
-  const result = new Map<number, number>();
-
-  // 1. Inside each block: propagate over its children, then bridge the output up
-  //    to a baseline for the block (capped by the block's own strength).
-  const blockBase = new Map<number, number>();
-  for (const block of nodes) {
-    if (!block.is_block) continue;
-    const children = nodes.filter((n) => n.parent_id === block.id);
-    const childEff = propagateLevel(children, edges, baseOf);
-    for (const [cid, r] of childEff) result.set(cid, r);
-    const output = blockOutput(block.id, nodes, edges);
-    let outRank = output ? (childEff.get(output.id) ?? own(output)) : own(block);
-    // A block whose output is an open hole, with something at the parent level
-    // resting on the block, is broken across the boundary.
-    if (output && isGap(output) && hasDependents(block.id)) outRank = 0;
-    blockBase.set(block.id, Math.min(own(block), outRank));
-  }
-
-  // 2. Top level: each node's baseline is its bridged block strength (if a block),
-  //    a forced break (load-bearing gap), or its own strength.
-  const top = nodes.filter((n) => (n.parent_id ?? null) === null);
-  const topEff = propagateLevel(top, edges, (id) => {
-    const n = byId.get(id);
-    if (!n) return 1;
-    return n.is_block ? (blockBase.get(id) ?? own(n)) : baseOf(id);
-  });
-  for (const [id, r] of topEff) result.set(id, r);
+  computeLevel(null);
 
   const out: Record<number, Strength> = {};
   for (const n of nodes) out[n.id] = BY_RANK[result.get(n.id) ?? own(n)];

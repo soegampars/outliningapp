@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSpine } from "../state/store";
-import { STRENGTHS } from "../model/types";
+import { STRENGTHS, type ArgNode } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
 import { gapTypeIds, isGapTypeName } from "../model/gaps";
 import { shortLabel } from "../lib/bibtex";
@@ -61,6 +61,19 @@ export function PeekPanel() {
   const dependents = edges.filter((e) => e.from_id === nid);
   const isGapNode = isGapTypeName(nodeTypeById[node.type_id]?.name);
   const isParked = isGapNode && feeders.length === 0 && dependents.length === 0;
+  // 3-layer cap: only nodes at depth 0-1 may own a sub-canvas.
+  const depth = (() => {
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    let d = 0;
+    let cur: ArgNode | undefined = node;
+    while (cur && cur.parent_id != null) {
+      d++;
+      cur = byId.get(cur.parent_id);
+      if (d > 8) break;
+    }
+    return d;
+  })();
+  const canNest = depth <= 1;
   const nodeById = (id: number) => nodes.find((n) => n.id === id);
   const typeName = (id: number) => {
     const n = nodeById(id);
@@ -95,7 +108,7 @@ export function PeekPanel() {
         </button>
       </div>
 
-      {node.parent_id == null && (
+      {(node.is_block || canNest) && (
         <div className="peek-section">
           {node.is_block ? (
             <>

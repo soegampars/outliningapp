@@ -4,6 +4,20 @@ import * as repo from "../data/repo";
 import { entryToSource, parseBibtex } from "../lib/bibtex";
 import { topoOrderIds } from "../model/order";
 import { blockOutput } from "../model/blocks";
+
+// How deeply a node is nested: a top-level node is depth 0, a block child 1, etc.
+// Used to enforce the 3-layer nesting cap (only depth 0-1 nodes may become blocks).
+function nodeDepth(nodes: ArgNode[], id: number): number {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let depth = 0;
+  let cur = byId.get(id);
+  while (cur && cur.parent_id != null) {
+    depth++;
+    cur = byId.get(cur.parent_id);
+    if (depth > 8) break;
+  }
+  return depth;
+}
 import { openProject, parseProject, saveProject, serializeProject } from "../lib/projectFile";
 
 export type ViewMode = "graph" | "linear";
@@ -50,6 +64,7 @@ interface SpineState {
   dissolveBlock: (id: number) => Promise<void>;
   drillInto: (id: number) => void;
   drillUp: () => void;
+  drillTo: (parentId: number | null) => void;
   setNodeClaim: (id: number, claim: string) => Promise<void>;
   setNodeBody: (id: number, body: string) => Promise<void>;
   setNodeType: (id: number, typeId: number) => Promise<void>;
@@ -298,7 +313,8 @@ export const useSpine = create<SpineState>((set, get) => {
     // Turn a top-level node into a block and drill into its (seeded) sub-canvas.
     async makeBlock(id) {
       const node = get().nodes.find((n) => n.id === id);
-      if (!node || node.parent_id != null || node.is_block) return; // depth-2 cap
+      // 3-layer cap: a node already at depth 2 (layer 3) can't own a sub-canvas.
+      if (!node || node.is_block || nodeDepth(get().nodes, id) > 1) return;
       const outId = await repo.makeBlock(node);
       const out: ArgNode = {
         id: outId,
@@ -329,6 +345,10 @@ export const useSpine = create<SpineState>((set, get) => {
       const cur = get().currentParentId;
       const block = cur != null ? get().nodes.find((n) => n.id === cur) : null;
       set({ currentParentId: block?.parent_id ?? null, ...CLEARED_SELECTION });
+    },
+
+    drillTo(parentId) {
+      set({ currentParentId: parentId, ...CLEARED_SELECTION });
     },
 
     async dissolveBlock(id) {
