@@ -6,9 +6,17 @@ Spine is a single-user, local-first desktop app for the structural stage of writ
 
 It is deliberately **not** a reference manager, **not** a prose word-processor, and **not** a note vault. The actual writing and your reference library live elsewhere (Zotero, your editor of choice). Spine serves the one stage those tools handle badly: keeping the high-order argument legible while you work.
 
-> **Status: feature-complete (v1 + v2), actively developed.** The whole v1 roadmap — model, inspector, weakest-link strength propagation, BibTeX import, Markdown export, linear view, provenance tools — is working, along with the v2 mechanics: nested argument blocks, cross-level strength, gap/terminus handling, and spine-vs-lateral rendering. Expect rough edges.
+> **Status: feature-complete (v1 + v2 + v3), actively developed.** The whole v1 roadmap — model, inspector, weakest-link strength propagation, BibTeX import, Markdown export, linear view, provenance tools — is working, along with v2 (nested argument blocks, cross-level strength, gap/terminus handling, spine-vs-lateral rendering) and v3 (three-level nesting, type-derived strength, a problem-framing scale, a parking-lot gap, and an integrated linear view). Expect rough edges.
 
 <!-- ![Spine canvas](docs/screenshot.png) -->
+
+## Download
+
+**[➜ Download the latest Windows installer from Releases](https://github.com/soegampars/outliningapp/releases/latest)** — grab the `.msi` (or `.exe`), run it, done. No Git or Node required.
+
+> The installer is **not code-signed yet**, so Windows SmartScreen may warn "Windows protected your PC." Click **More info → Run anyway** to proceed. (Or build it yourself from source — see below.)
+
+See **[docs/FEATURES.md](docs/FEATURES.md)** for the full feature guide.
 
 ---
 
