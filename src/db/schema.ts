@@ -75,7 +75,8 @@ export async function initSchema(db: Db): Promise<void> {
       node_id    INTEGER NOT NULL REFERENCES node(id),
       text       TEXT NOT NULL DEFAULT '',
       source_id  INTEGER REFERENCES source(id),
-      sort_order INTEGER NOT NULL DEFAULT 0
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      stance     TEXT
     )`);
 
   // Curated reading sequence — a first-class object (concept §3 view-state).
@@ -100,6 +101,12 @@ export async function initSchema(db: Db): Promise<void> {
   }
   if (!names.has("is_block")) {
     await db.execute("ALTER TABLE node ADD COLUMN is_block INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // Migration for the support for/against stance (v3). Null = neutral.
+  const supportCols = await db.select<{ name: string }>("PRAGMA table_info(support)");
+  if (!new Set(supportCols.map((c) => c.name)).has("stance")) {
+    await db.execute("ALTER TABLE support ADD COLUMN stance TEXT");
   }
 
   // Seed the built-in types, and add any that a pre-existing database is missing

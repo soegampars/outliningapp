@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSpine } from "../state/store";
-import { STRENGTHS, type ArgNode } from "../model/types";
+import { STRENGTHS, type ArgNode, type Stance } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
 import { gapTypeIds, isGapTypeName } from "../model/gaps";
 import { strengthMode, derivedTypeIds, framingTypeIds, framingLabel } from "../model/strengthModes";
@@ -30,6 +30,7 @@ export function PeekPanel() {
   const setSupportSource = useSpine((s) => s.setSupportSource);
   const removeSupport = useSpine((s) => s.removeSupport);
   const reorderSupports = useSpine((s) => s.reorderSupports);
+  const setSupportStance = useSpine((s) => s.setSupportStance);
   const select = useSpine((s) => s.select);
   const makeBlock = useSpine((s) => s.makeBlock);
   const dissolveBlock = useSpine((s) => s.dissolveBlock);
@@ -92,6 +93,16 @@ export function PeekPanel() {
     return n ? (nodeTypeById[n.type_id]?.name ?? "") : "";
   };
   const kindLabel = (kind: string) => (kind === "disjunctive" ? "any-of" : "all-of");
+
+  const nextStance = (cur: Stance): Stance =>
+    cur === null ? "for" : cur === "for" ? "against" : null;
+  const stanceGlyph = (cur: Stance) => (cur === "for" ? "+" : cur === "against" ? "−" : "·");
+  const stanceTitle = (cur: Stance) =>
+    cur === "for"
+      ? "Argues FOR this claim — click to mark against"
+      : cur === "against"
+        ? "Argues AGAINST this claim — click to clear"
+        : "No stance — click to mark this support as arguing for the claim";
 
   const dropSupportOn = (targetId: number) => {
     setDragOverId(null);
@@ -263,6 +274,7 @@ export function PeekPanel() {
               className={
                 "peek-support" +
                 (isCite ? " citation" : "") +
+                (s.stance ? " stance-" + s.stance : "") +
                 (dragId === s.id ? " dragging" : "") +
                 (dragOverId === s.id && dragId !== s.id ? " drop-target" : "")
               }
@@ -292,6 +304,13 @@ export function PeekPanel() {
                 >
                   ⠿
                 </span>
+                <button
+                  className={"peek-support__stance " + (s.stance ?? "neutral")}
+                  title={stanceTitle(s.stance)}
+                  onClick={() => void setSupportStance(s.id, nextStance(s.stance))}
+                >
+                  {stanceGlyph(s.stance)}
+                </button>
                 <span className={"peek-support__kind " + (isCite ? "citation" : "own")}>
                   {isCite ? "citation" : "own reasoning"}
                 </span>

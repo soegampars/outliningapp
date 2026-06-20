@@ -1,5 +1,14 @@
 import { create } from "zustand";
-import type { ArgNode, Edge, EdgeKind, NodeType, Source, Strength, Support } from "../model/types";
+import type {
+  ArgNode,
+  Edge,
+  EdgeKind,
+  NodeType,
+  Source,
+  Stance,
+  Strength,
+  Support,
+} from "../model/types";
 import * as repo from "../data/repo";
 import { entryToSource, parseBibtex } from "../lib/bibtex";
 import { topoOrderIds } from "../model/order";
@@ -82,6 +91,7 @@ interface SpineState {
   setSupportSource: (id: number, sourceId: number | null) => Promise<void>;
   removeSupport: (id: number) => Promise<void>;
   reorderSupports: (nodeId: number, orderedIds: number[]) => Promise<void>;
+  setSupportStance: (id: number, stance: Stance) => Promise<void>;
   importBibtex: (text: string) => Promise<{ created: number; updated: number; total: number }>;
   ensureLinearOrder: () => Promise<void>;
   setLinearOrder: (ids: number[]) => Promise<void>;
@@ -292,13 +302,14 @@ export const useSpine = create<SpineState>((set, get) => {
       const srcSupports = get().supports.filter((s) => s.node_id === id);
       const newSupports: Support[] = [];
       for (const s of srcSupports) {
-        const sid = await repo.createSupport(newId, s.text, s.source_id, s.sort_order);
+        const sid = await repo.createSupport(newId, s.text, s.source_id, s.sort_order, s.stance);
         newSupports.push({
           id: sid,
           node_id: newId,
           text: s.text,
           source_id: s.source_id,
           sort_order: s.sort_order,
+          stance: s.stance,
         });
       }
       set((s) => ({
@@ -495,7 +506,7 @@ export const useSpine = create<SpineState>((set, get) => {
       set((s) => ({
         supports: [
           ...s.supports,
-          { id, node_id: nodeId, text: "", source_id: null, sort_order: order },
+          { id, node_id: nodeId, text: "", source_id: null, sort_order: order, stance: null },
         ],
       }));
     },
@@ -515,6 +526,11 @@ export const useSpine = create<SpineState>((set, get) => {
     async removeSupport(id) {
       await repo.deleteSupport(id);
       set((s) => ({ supports: s.supports.filter((x) => x.id !== id) }));
+    },
+
+    async setSupportStance(id, stance) {
+      await repo.updateSupportStance(id, stance);
+      set((s) => ({ supports: s.supports.map((x) => (x.id === id ? { ...x, stance } : x)) }));
     },
 
     async reorderSupports(_nodeId, orderedIds) {

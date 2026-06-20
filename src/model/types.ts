@@ -48,6 +48,9 @@ export interface Source {
   raw_bibtex: string | null;
 }
 
+// Whether a support argues for or against the claim (v3); null = neutral/context.
+export type Stance = "for" | "against" | null;
+
 // One use of evidence on one node. source_id null => the author's own reasoning.
 export interface Support {
   id: number;
@@ -55,4 +58,5 @@ export interface Support {
   text: string;
   source_id: number | null;
   sort_order: number;
+  stance: Stance;
 }

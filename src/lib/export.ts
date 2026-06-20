@@ -62,6 +62,7 @@ export function buildExport(scope: ExportScope, m: ExportModel, orderIds?: numbe
   out.push("> ^nID — stable anchor for cross-references");
   if (complete) {
     out.push("> cite:key — a citation (see Sources at end); own — the author's own reasoning");
+    out.push("> [for] / [against] — the support argues for or against the claim (debate)");
   }
   out.push("> jointly-required — all such feeders are needed (min); any-of — redundant alternatives (max)");
   out.push("");
@@ -86,7 +87,8 @@ export function buildExport(scope: ExportScope, m: ExportModel, orderIds?: numbe
         for (const s of sups) {
           const src = s.source_id != null ? sourceById.get(s.source_id) : undefined;
           const tag = src ? `cite:${src.key}` : "own";
-          out.push(`  - ${tag}${s.text ? ` — ${s.text}` : ""}`);
+          const stance = s.stance === "for" ? "[for] " : s.stance === "against" ? "[against] " : "";
+          out.push(`  - ${stance}${tag}${s.text ? ` — ${s.text}` : ""}`);
         }
       }
     }

@@ -1,5 +1,14 @@
 import { getDb } from "../db";
-import type { ArgNode, Edge, EdgeKind, NodeType, Source, Strength, Support } from "../model/types";
+import type {
+  ArgNode,
+  Edge,
+  EdgeKind,
+  NodeType,
+  Source,
+  Stance,
+  Strength,
+  Support,
+} from "../model/types";
 import { DEFAULT_NODE_TYPES } from "../db/schema";
 
 // CRUD over the SQLite model. SQLite stays the single source of truth (§2.4);
@@ -129,7 +138,7 @@ export async function updateEdgeKind(id: number, kind: EdgeKind): Promise<void> 
 export async function listSupportsForNode(nodeId: number): Promise<Support[]> {
   const db = await conn();
   return db.select<Support>(
-    "SELECT id, node_id, text, source_id, sort_order FROM support WHERE node_id = $1 ORDER BY sort_order, id",
+    "SELECT id, node_id, text, source_id, sort_order, stance FROM support WHERE node_id = $1 ORDER BY sort_order, id",
     [nodeId],
   );
 }
@@ -137,7 +146,7 @@ export async function listSupportsForNode(nodeId: number): Promise<Support[]> {
 export async function listAllSupports(): Promise<Support[]> {
   const db = await conn();
   return db.select<Support>(
-    "SELECT id, node_id, text, source_id, sort_order FROM support ORDER BY node_id, sort_order, id",
+    "SELECT id, node_id, text, source_id, sort_order, stance FROM support ORDER BY node_id, sort_order, id",
   );
 }
 
@@ -165,13 +174,19 @@ export async function createSupport(
   text: string,
   sourceId: number | null,
   sortOrder: number,
+  stance: Stance = null,
 ): Promise<number> {
   const db = await conn();
   const r = await db.execute(
-    "INSERT INTO support (node_id, text, source_id, sort_order) VALUES ($1, $2, $3, $4)",
-    [nodeId, text, sourceId, sortOrder],
+    "INSERT INTO support (node_id, text, source_id, sort_order, stance) VALUES ($1, $2, $3, $4, $5)",
+    [nodeId, text, sourceId, sortOrder, stance],
   );
   return Number(r.lastInsertId);
+}
+
+export async function updateSupportStance(id: number, stance: Stance): Promise<void> {
+  const db = await conn();
+  await db.execute("UPDATE support SET stance = $1 WHERE id = $2", [stance, id]);
 }
 
 export async function updateSupportText(id: number, text: string): Promise<void> {
@@ -355,8 +370,8 @@ export async function bulkInsert(p: ProjectData): Promise<void> {
   }
   for (const s of p.supports) {
     await db.execute(
-      "INSERT INTO support (id, node_id, text, source_id, sort_order) VALUES ($1, $2, $3, $4, $5)",
-      [s.id, s.node_id, s.text, s.source_id, s.sort_order],
+      "INSERT INTO support (id, node_id, text, source_id, sort_order, stance) VALUES ($1, $2, $3, $4, $5, $6)",
+      [s.id, s.node_id, s.text, s.source_id, s.sort_order, s.stance ?? null],
     );
   }
   let pos = 0;
