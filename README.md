@@ -10,6 +10,8 @@ It is deliberately **not** a reference manager, **not** a prose word-processor, 
 
 <!-- ![Spine canvas](docs/screenshot.png) -->
 
+_Last updated: 2026-06-20 (v3). See the [Changelog](#changelog)._
+
 ## Download
 
 **[➜ Download the latest Windows installer from Releases](https://github.com/soegampars/outliningapp/releases/latest)** — grab the `.msi` (or `.exe`), run it, done. No Git or Node required.
@@ -158,12 +160,31 @@ The build order — each step leaves a usable app.
 - [x] **Spine vs lateral support** — main thread as a backbone, side supports with a lighter connector
 - [x] **Argument-position roles** — a distinct terminus (any type) and block-output / section-conclusion rendering
 
-**Possible next:** raising the two-level nesting cap, richer export targets, and quality-of-life polish driven by real use.
+**v3 — depth, nuance, and the debate:**
+
+- [x] **Three-level nesting** — blocks within blocks (cap 3); strength bridges through every level
+- [x] **Type-derived strength** — conclusions / implications take their strength from their premises
+- [x] **Problem-framing scale** — a framing judged on its own basis, not dragged down by the chain
+- [x] **Parking-lot gaps** — a distinct, detached placeholder for "I know I need this, not where yet"
+- [x] **Integrated linear view** — block inner chains shown indented & dimmed beneath their block
+- [x] **Supports: reorder & take sides** — drag to reorder; mark each support for / against to document the debate
+
+**Possible next:** code-signed installers, richer export targets, and quality-of-life polish driven by real use.
+
+## Changelog
+
+- **2026-06-20 — v3** — three-level nesting; type-derived strength + a problem-framing scale; detached parking-lot gaps; integrated linear view (sub-levels indented & dimmed); draggable supports with a for/against stance; dissolve-block; view re-centering; GPL v3; this README + a features wiki + a downloadable installer.
+- **v2** — nested argument blocks (2 levels), cross-level strength bridge, gap / terminus handling, spine-vs-lateral rendering, argument-position roles; plus selection/interaction fixes.
+- **v1** — core model + skeleton canvas, inspector, weakest-link strength propagation, BibTeX import, Markdown export, linear/drafting view, provenance tools, and Save / Open / New.
 
 ## License
 
-Not yet licensed. A `LICENSE` file should be added before any public release — [MIT](https://choosealicense.com/licenses/mit/) is a reasonable permissive default.
+Spine is released under the **[GNU General Public License v3.0](LICENSE)** — free to use, study, share, and modify, with the condition that derivative works are distributed under the same license.
 
 ## Acknowledgements
 
 Built with [Tauri](https://tauri.app/), [React Flow](https://reactflow.dev/), and [sql.js](https://github.com/sql-js/sql.js).
+
+## Built with Claude
+
+In the interest of transparency: Spine was designed and written by **Claude Opus 4.8** (Anthropic) in close collaboration with the author, who set the concept, made the product decisions, and tested every change. The argument-mapping idea, the priorities, and the judgement calls are the author's; the implementation is Claude's.

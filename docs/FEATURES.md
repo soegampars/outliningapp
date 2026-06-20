@@ -115,7 +115,10 @@ Open a node to edit it without leaving the skeleton on screen:
 - Claim, body, type, strength, **attention** flag (⚑ "come back to this").
 - **Supports** — the flesh: paraphrases, quotes, or your own reasoning attached to a
   node. A support linked to a source is a **citation**; otherwise it's your own
-  reasoning. Supports never clutter the canvas.
+  reasoning. Supports never clutter the canvas. **Drag** them (by the grip) to
+  reorder; mark each **for / against** (+ / −) to document the *debate* around a
+  claim — which evidence argues for it, which against. (The stance also shows in the
+  Markdown export.)
 - Feeders ("supported by") and dependents ("feeds into"), each clickable to navigate.
 
 ## Sources & provenance
