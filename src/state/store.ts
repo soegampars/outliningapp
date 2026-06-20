@@ -81,6 +81,7 @@ interface SpineState {
   setSupportText: (id: number, text: string) => Promise<void>;
   setSupportSource: (id: number, sourceId: number | null) => Promise<void>;
   removeSupport: (id: number) => Promise<void>;
+  reorderSupports: (nodeId: number, orderedIds: number[]) => Promise<void>;
   importBibtex: (text: string) => Promise<{ created: number; updated: number; total: number }>;
   ensureLinearOrder: () => Promise<void>;
   setLinearOrder: (ids: number[]) => Promise<void>;
@@ -514,6 +515,18 @@ export const useSpine = create<SpineState>((set, get) => {
     async removeSupport(id) {
       await repo.deleteSupport(id);
       set((s) => ({ supports: s.supports.filter((x) => x.id !== id) }));
+    },
+
+    async reorderSupports(_nodeId, orderedIds) {
+      await repo.setSupportOrder(orderedIds);
+      const pos = new Map(orderedIds.map((id, i) => [id, i]));
+      set((s) => ({
+        supports: s.supports
+          .map((x) => (pos.has(x.id) ? { ...x, sort_order: pos.get(x.id) as number } : x))
+          .sort(
+            (a, b) => a.node_id - b.node_id || a.sort_order - b.sort_order || a.id - b.id,
+          ),
+      }));
     },
 
     async importBibtex(text) {

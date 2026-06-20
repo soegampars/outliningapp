@@ -29,6 +29,7 @@ export function PeekPanel() {
   const setSupportText = useSpine((s) => s.setSupportText);
   const setSupportSource = useSpine((s) => s.setSupportSource);
   const removeSupport = useSpine((s) => s.removeSupport);
+  const reorderSupports = useSpine((s) => s.reorderSupports);
   const select = useSpine((s) => s.select);
   const makeBlock = useSpine((s) => s.makeBlock);
   const dissolveBlock = useSpine((s) => s.dissolveBlock);
@@ -37,6 +38,8 @@ export function PeekPanel() {
   const [claim, setClaim] = useState("");
   const [body, setBody] = useState("");
   const [confirmDissolve, setConfirmDissolve] = useState(false);
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
 
   const typeModes = useMemo(
     () => ({
@@ -89,6 +92,22 @@ export function PeekPanel() {
     return n ? (nodeTypeById[n.type_id]?.name ?? "") : "";
   };
   const kindLabel = (kind: string) => (kind === "disjunctive" ? "any-of" : "all-of");
+
+  const dropSupportOn = (targetId: number) => {
+    setDragOverId(null);
+    const src = dragId;
+    setDragId(null);
+    if (src == null || src === targetId) return;
+    const ids = supports.map((s) => s.id);
+    const from = ids.indexOf(src);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    ids.splice(from, 1);
+    let insertAt = ids.indexOf(targetId);
+    if (from < to) insertAt += 1; // dragged downward -> land after the target
+    ids.splice(insertAt, 0, src);
+    void reorderSupports(nid, ids);
+  };
 
   return (
     <aside className="peek-panel">
@@ -239,8 +258,40 @@ export function PeekPanel() {
           const src = s.source_id != null ? sourceById[s.source_id] : undefined;
           const isCite = s.source_id != null;
           return (
-            <div key={s.id} className={"peek-support" + (isCite ? " citation" : "")}>
+            <div
+              key={s.id}
+              className={
+                "peek-support" +
+                (isCite ? " citation" : "") +
+                (dragId === s.id ? " dragging" : "") +
+                (dragOverId === s.id && dragId !== s.id ? " drop-target" : "")
+              }
+              onDragOver={(e) => {
+                if (dragId == null) return;
+                e.preventDefault();
+                if (dragOverId !== s.id) setDragOverId(s.id);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                dropSupportOn(s.id);
+              }}
+              onDragEnd={() => {
+                setDragId(null);
+                setDragOverId(null);
+              }}
+            >
               <div className="peek-support__row">
+                <span
+                  className="peek-support__grip"
+                  title="Drag to reorder"
+                  draggable
+                  onDragStart={(e) => {
+                    setDragId(s.id);
+                    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+                  }}
+                >
+                  ⠿
+                </span>
                 <span className={"peek-support__kind " + (isCite ? "citation" : "own")}>
                   {isCite ? "citation" : "own reasoning"}
                 </span>

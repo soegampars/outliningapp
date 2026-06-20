@@ -189,6 +189,15 @@ export async function deleteSupport(id: number): Promise<void> {
   await db.execute("DELETE FROM support WHERE id = $1", [id]);
 }
 
+// Persist a new ordering of supports: sort_order becomes the array index.
+export async function setSupportOrder(ids: number[]): Promise<void> {
+  const db = await conn();
+  let i = 0;
+  for (const id of ids) {
+    await db.execute("UPDATE support SET sort_order = $1 WHERE id = $2", [i++, id]);
+  }
+}
+
 // --- Sources (populated by BibTeX import in Step 4) ---
 
 export async function listSources(): Promise<Source[]> {
