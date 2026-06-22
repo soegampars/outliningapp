@@ -246,6 +246,23 @@
   color: var(--strength-unfinished);
   font-size: 12px;
 }
+.linear-grip {
+  cursor: grab;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  user-select: none;
+  padding: 0 2px;
+}
+.linear-grip:active {
+  cursor: grabbing;
+}
+.linear-item--dragging {
+  opacity: 0.5;
+}
+.linear-item--dragover {
+  box-shadow: inset 0 3px 0 0 var(--support-citation);
+}
 .linear-move {
   background: var(--node-surface);
   color: var(--text-secondary);
@@ -527,6 +544,13 @@
   opacity: 0.5;
   outline: 1px dashed var(--support-citation);
   outline-offset: 2px;
+}
+
+/* A node being hovered while a support is dragged over it (cross-box move, v3). */
+.spine-node--supdrop {
+  outline: 2px solid var(--support-citation);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--support-citation) 25%, transparent);
 }
 
 /* Arrange toolbar (v3) — align / distribute / gather selected nodes. */

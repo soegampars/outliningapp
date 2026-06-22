@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSpine } from "../state/store";
 import type { ArgNode, Support } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
@@ -83,6 +83,19 @@ export function LinearView() {
     void setLinearOrder(arr);
   };
 
+  // Top-level drag reorder (v3). Only depth-0 rows are draggable; sub-levels keep
+  // their own dependency order. Drops the dragged id immediately before the target.
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
+  const dropLinearOn = (targetId: number) => {
+    if (dragId == null || dragId === targetId) return;
+    const arr = topSeq.filter((id) => id !== dragId);
+    const at = arr.indexOf(targetId);
+    if (at < 0) return;
+    arr.splice(at, 0, dragId);
+    void setLinearOrder(arr);
+  };
+
   const open = (id: number) => focusNode(id);
   const labelOf = (n: ArgNode) =>
     (n.is_block ? blockOutput(n.id, nodes, edges)?.claim || n.claim : n.claim) || "(untitled)";
@@ -100,10 +113,53 @@ export function LinearView() {
             return (
               <section
                 key={n.id}
-                className={"linear-item" + (depth > 0 ? " linear-item--nested" : "")}
+                className={
+                  "linear-item" +
+                  (depth > 0 ? " linear-item--nested" : "") +
+                  (dragId === n.id ? " linear-item--dragging" : "") +
+                  (dragOverId === n.id ? " linear-item--dragover" : "")
+                }
                 style={depth > 0 ? { marginLeft: depth * 26 } : undefined}
+                onDragOver={(e) => {
+                  if (depth !== 0) return;
+                  if (!e.dataTransfer.types.includes("application/x-spine-linear")) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dragOverId !== n.id) setDragOverId(n.id);
+                }}
+                onDragLeave={() => {
+                  if (depth !== 0) return;
+                  setDragOverId((cur) => (cur === n.id ? null : cur));
+                }}
+                onDrop={(e) => {
+                  if (depth !== 0) return;
+                  if (!e.dataTransfer.types.includes("application/x-spine-linear")) return;
+                  e.preventDefault();
+                  dropLinearOn(n.id);
+                  setDragId(null);
+                  setDragOverId(null);
+                }}
               >
                 <div className="linear-item__bar">
+                  {depth === 0 && (
+                    <span
+                      className="linear-grip"
+                      title="Drag to reorder"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("application/x-spine-linear", String(n.id));
+                        e.dataTransfer.setData("text/plain", String(n.id));
+                        e.dataTransfer.effectAllowed = "move";
+                        setDragId(n.id);
+                      }}
+                      onDragEnd={() => {
+                        setDragId(null);
+                        setDragOverId(null);
+                      }}
+                    >
+                      ⠿
+                    </span>
+                  )}
                   <span className={"linear-badge strength-text-" + eff}>
                     {nodeTypeById[n.type_id]?.name ?? "NODE"} · {eff}
                     {n.is_block ? " ▸" : ""}

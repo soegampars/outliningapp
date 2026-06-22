@@ -209,6 +209,21 @@ export async function updateSupportStance(id: number, stance: Stance): Promise<v
   await db.execute("UPDATE support SET stance = $1 WHERE id = $2", [stance, id]);
 }
 
+// Move a support to another node (drag it onto a different box). It lands at the
+// end of the target's support list.
+export async function updateSupportNode(
+  id: number,
+  nodeId: number,
+  sortOrder: number,
+): Promise<void> {
+  const db = await conn();
+  await db.execute("UPDATE support SET node_id = $1, sort_order = $2 WHERE id = $3", [
+    nodeId,
+    sortOrder,
+    id,
+  ]);
+}
+
 export async function updateSupportText(id: number, text: string): Promise<void> {
   const db = await conn();
   await db.execute("UPDATE support SET text = $1 WHERE id = $2", [text, id]);

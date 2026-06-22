@@ -99,6 +99,7 @@ interface SpineState {
   removeSupport: (id: number) => Promise<void>;
   reorderSupports: (nodeId: number, orderedIds: number[]) => Promise<void>;
   setSupportStance: (id: number, stance: Stance) => Promise<void>;
+  moveSupportToNode: (supportId: number, nodeId: number) => Promise<void>;
   importBibtex: (text: string) => Promise<{ created: number; updated: number; total: number }>;
   ensureLinearOrder: () => Promise<void>;
   setLinearOrder: (ids: number[]) => Promise<void>;
@@ -667,6 +668,21 @@ export const useSpine = create<SpineState>((set, get) => {
       get().pushUndo();
       await repo.updateSupportStance(id, stance);
       set((s) => ({ supports: s.supports.map((x) => (x.id === id ? { ...x, stance } : x)) }));
+    },
+
+    async moveSupportToNode(supportId, nodeId) {
+      const s = get();
+      const sup = s.supports.find((x) => x.id === supportId);
+      if (!sup || sup.node_id === nodeId) return;
+      get().pushUndo();
+      const order = s.supports.filter((x) => x.node_id === nodeId).length;
+      await repo.updateSupportNode(supportId, nodeId, order);
+      set((st) => ({
+        supports: st.supports.map((x) =>
+          x.id === supportId ? { ...x, node_id: nodeId, sort_order: order } : x,
+        ),
+      }));
+      flash("Moved support to another box");
     },
 
     async reorderSupports(_nodeId, orderedIds) {

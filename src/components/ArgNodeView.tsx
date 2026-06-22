@@ -26,12 +26,14 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
   const nodeTypes = useSpine((s) => s.nodeTypes);
   const setNodeType = useSpine((s) => s.setNodeType);
   const setNodeClaim = useSpine((s) => s.setNodeClaim);
+  const moveSupportToNode = useSpine((s) => s.moveSupportToNode);
   // Edit mode is driven by React Flow's onNodeDoubleClick (canvas-level), which
   // is reliable; RF intercepts double-clicks before they reach inner handlers.
   const editing = useSpine((s) => s.editingNodeId === nid);
   const setEditing = useSpine((s) => s.setEditing);
 
   const [draft, setDraft] = useState(d.claim);
+  const [supDrop, setSupDrop] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -81,10 +83,32 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
     (d.positionRole ? " spine-node--" + d.positionRole : "") +
     (d.parked ? " spine-node--parked" : "") +
     (isFraming ? " spine-node--framing" : "") +
-    (d.cut ? " spine-node--cut" : "");
+    (d.cut ? " spine-node--cut" : "") +
+    (supDrop ? " spine-node--supdrop" : "");
 
   return (
-    <div className={cls}>
+    <div
+      className={cls}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("application/x-spine-support")) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          if (!supDrop) setSupDrop(true);
+        }
+      }}
+      onDragLeave={() => {
+        if (supDrop) setSupDrop(false);
+      }}
+      onDrop={(e) => {
+        const raw = e.dataTransfer.getData("application/x-spine-support");
+        if (raw) {
+          e.preventDefault();
+          setSupDrop(false);
+          const sid = Number(raw);
+          if (!Number.isNaN(sid)) void moveSupportToNode(sid, nid);
+        }
+      }}
+    >
       <Handle type="target" position={Position.Top} />
 
       <div className="spine-node__head">
