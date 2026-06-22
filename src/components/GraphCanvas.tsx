@@ -20,6 +20,7 @@ import { derivedTypeIds, framingTypeIds } from "../model/strengthModes";
 import { classifySpine } from "../model/spine";
 import { blockOutput } from "../model/blocks";
 import { ArgNodeView } from "./ArgNodeView";
+import { ArrangeToolbar } from "./ArrangeToolbar";
 
 const nodeTypes = { arg: ArgNodeView };
 // Stable references — inline literals here would be new every render and feed
@@ -425,6 +426,8 @@ export function GraphCanvas() {
         <Background gap={18} size={1} />
         <Controls showInteractive={false} />
       </ReactFlow>
+
+      <ArrangeToolbar />
 
       {visibleNodes.length === 0 && (
         <div

@@ -522,6 +522,52 @@
   color: var(--support-citation) !important;
 }
 
+/* Arrange toolbar (v3) — align / distribute / gather selected nodes. */
+.arrange-toolbar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  background: var(--panel-surface);
+  border: 1px solid var(--edge-default);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+.arrange-toolbar button {
+  background: var(--node-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--edge-default);
+  border-radius: 5px;
+  min-width: 26px;
+  height: 26px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.arrange-toolbar button:hover {
+  border-color: var(--support-citation);
+}
+.arrange-toolbar__primary {
+  font-weight: 600;
+  padding: 0 8px;
+}
+.arrange-toolbar__count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 0 4px;
+}
+.arrange-toolbar__sep {
+  width: 1px;
+  height: 18px;
+  background: var(--edge-default);
+  margin: 0 2px;
+}
+
 /* Spine vs lateral support (v2-E). The backbone reads solid; lateral supports
    recede so the main thread is obvious at a glance in a long spine. */
 .spine-node--onspine {

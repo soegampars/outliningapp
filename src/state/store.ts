@@ -81,6 +81,7 @@ interface SpineState {
   setNodeAttention: (id: number, attention: number) => Promise<void>;
   moveNodeLocal: (id: number, x: number, y: number) => void;
   persistNodePosition: (id: number) => Promise<void>;
+  setNodePositions: (updates: { id: number; x: number; y: number }[]) => Promise<void>;
   removeNode: (id: number) => Promise<void>;
   addEdge: (fromId: number, toId: number) => Promise<void>;
   setEdgeKind: (id: number, kind: EdgeKind) => Promise<void>;
@@ -435,6 +436,18 @@ export const useSpine = create<SpineState>((set, get) => {
     async persistNodePosition(id) {
       const n = get().nodes.find((m) => m.id === id);
       if (n) await repo.updateNodePosition(id, n.pos_x, n.pos_y);
+    },
+
+    async setNodePositions(updates) {
+      if (!updates.length) return;
+      const m = new Map(updates.map((u) => [u.id, u]));
+      set((s) => ({
+        nodes: s.nodes.map((n) => {
+          const u = m.get(n.id);
+          return u ? { ...n, pos_x: u.x, pos_y: u.y } : n;
+        }),
+      }));
+      await repo.setNodePositions(updates);
     },
 
     async removeNode(id) {
