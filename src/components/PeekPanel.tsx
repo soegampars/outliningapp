@@ -3,6 +3,7 @@ import { useSpine } from "../state/store";
 import { STRENGTHS, type ArgNode, type Stance } from "../model/types";
 import { computeEffectiveStrength } from "../model/strength";
 import { gapTypeIds, isGapTypeName } from "../model/gaps";
+import { blockOutput } from "../model/blocks";
 import { strengthMode, derivedTypeIds, framingTypeIds, framingLabel } from "../model/strengthModes";
 import { shortLabel } from "../lib/bibtex";
 
@@ -59,14 +60,22 @@ export function PeekPanel() {
     [allSupports, selectedNodeId],
   );
 
+  // A block's claim/body are edited through its OUTPUT node, since the canvas label
+  // mirrors the output — editing the block node itself would change nothing visible.
+  const editTarget = useMemo(() => {
+    if (!node) return null;
+    return node.is_block ? (blockOutput(node.id, nodes, edges) ?? node) : node;
+  }, [node, nodes, edges]);
+
   useEffect(() => {
-    setClaim(node?.claim ?? "");
-    setBody(node?.body ?? "");
+    setClaim(editTarget?.claim ?? "");
+    setBody(editTarget?.body ?? "");
     setConfirmDissolve(false);
-  }, [selectedNodeId, node?.claim, node?.body]);
+  }, [selectedNodeId, editTarget?.id, editTarget?.claim, editTarget?.body]);
 
   if (!node) return null;
   const nid = node.id;
+  const target = editTarget ?? node;
   const effective = effectiveById[nid] ?? node.strength;
 
   const feeders = edges.filter((e) => e.to_id === nid);
@@ -155,7 +164,8 @@ export function PeekPanel() {
                 Open block ▸
               </button>
               <span className="peek-blocknote">
-                The claim shown on the canvas mirrors this block's output node.
+                The Claim above is this block's output — edit it here or inside the block; the
+                canvas label updates either way.
               </span>
               {confirmDissolve ? (
                 <div className="peek-confirm">
@@ -196,7 +206,7 @@ export function PeekPanel() {
           value={claim}
           placeholder="Short claim shown on the canvas"
           onChange={(e) => setClaim(e.target.value)}
-          onBlur={() => void setNodeClaim(nid, claim)}
+          onBlur={() => void setNodeClaim(target.id, claim)}
         />
       </div>
 
@@ -207,7 +217,7 @@ export function PeekPanel() {
           value={body}
           placeholder="Longer statement of the claim (shown in detail / linear views)"
           onChange={(e) => setBody(e.target.value)}
-          onBlur={() => void setNodeBody(nid, body)}
+          onBlur={() => void setNodeBody(target.id, body)}
         />
       </div>
 
@@ -299,7 +309,14 @@ export function PeekPanel() {
                   draggable
                   onDragStart={(e) => {
                     setDragId(s.id);
-                    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+                    if (e.dataTransfer) {
+                      e.dataTransfer.effectAllowed = "move";
+                      // A payload is required or Chromium/WebView2 treats the drag as
+                      // invalid and fires no drop. The custom mime is reused (Phase 6)
+                      // for dropping a support onto another box on the canvas.
+                      e.dataTransfer.setData("application/x-spine-support", String(s.id));
+                      e.dataTransfer.setData("text/plain", String(s.id));
+                    }
                   }}
                 >
                   ⠿
