@@ -49,6 +49,11 @@ export default function App() {
 
       if (inField) return;
 
+      if (mod && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
+        e.preventDefault();
+        void st.undo();
+        return;
+      }
       if (mod && (e.key === "d" || e.key === "D")) {
         if (st.view === "graph" && st.selectedNodeId != null) {
           e.preventDefault();

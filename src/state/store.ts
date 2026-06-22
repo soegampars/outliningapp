@@ -44,6 +44,7 @@ interface SpineState {
   sources: Source[];
   sourceById: Record<number, Source>;
   linearOrder: number[];
+  undoStack: repo.ProjectData[]; // snapshots for multi-step undo (v3)
   currentParentId: number | null; // which level the canvas shows (null = top, else a block)
   selectedNodeId: number | null;
   selectedEdgeId: number | null;
@@ -60,6 +61,8 @@ interface SpineState {
   load: () => Promise<void>;
   newProject: () => Promise<void>;
   loadProjectData: (p: repo.ProjectData) => Promise<void>;
+  pushUndo: () => void;
+  undo: () => Promise<void>;
   setCurrentFile: (name: string | null, path: string | null) => Promise<void>;
   saveCurrent: (forceDialog: boolean) => Promise<void>;
   requestNewProject: () => void;
@@ -137,6 +140,7 @@ export const useSpine = create<SpineState>((set, get) => {
     sources: [],
     sourceById: {},
     linearOrder: [],
+    undoStack: [],
     currentParentId: null,
     selectedNodeId: null,
     selectedEdgeId: null,
@@ -186,14 +190,41 @@ export const useSpine = create<SpineState>((set, get) => {
       await repo.setMeta("currentFileName", null);
       await repo.setMeta("currentFilePath", null);
       await get().load();
-      set({ view: "graph", currentParentId: null, sourcesOpen: false, focusedSourceId: null, ...CLEARED_SELECTION });
+      set({ view: "graph", currentParentId: null, sourcesOpen: false, focusedSourceId: null, undoStack: [], ...CLEARED_SELECTION });
     },
 
     async loadProjectData(p) {
       await repo.wipeAll();
       await repo.bulkInsert(p);
       await get().load();
-      set({ view: "graph", currentParentId: null, sourcesOpen: false, focusedSourceId: null, ...CLEARED_SELECTION });
+      set({ view: "graph", currentParentId: null, sourcesOpen: false, focusedSourceId: null, undoStack: [], ...CLEARED_SELECTION });
+    },
+
+    pushUndo() {
+      const s = get();
+      const snap: repo.ProjectData = {
+        nodeTypes: [...s.nodeTypes],
+        nodes: [...s.nodes],
+        edges: [...s.edges],
+        sources: [...s.sources],
+        supports: [...s.supports],
+        linearOrder: [...s.linearOrder],
+      };
+      const next = [...s.undoStack, snap];
+      if (next.length > 50) next.shift();
+      set({ undoStack: next });
+    },
+
+    async undo() {
+      const stack = get().undoStack;
+      if (!stack.length) return;
+      const snap = stack[stack.length - 1];
+      set({ undoStack: stack.slice(0, -1) });
+      // Restore the snapshot (mirrors loadProjectData but keeps the undo stack).
+      await repo.wipeAll();
+      await repo.bulkInsert(snap);
+      await get().load();
+      set({ currentParentId: null, sourcesOpen: false, focusedSourceId: null, ...CLEARED_SELECTION });
     },
 
     async setCurrentFile(name, path) {
@@ -262,6 +293,7 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async addNode(typeId, x, y) {
+      get().pushUndo();
       const parentId = get().currentParentId;
       const id = await repo.createNode(typeId, x, y, "", parentId);
       const node: ArgNode = {
@@ -288,6 +320,7 @@ export const useSpine = create<SpineState>((set, get) => {
     async duplicateNode(id) {
       const src = get().nodes.find((n) => n.id === id);
       if (!src) return;
+      get().pushUndo();
       const fields = {
         type_id: src.type_id,
         claim: src.claim,
@@ -328,6 +361,7 @@ export const useSpine = create<SpineState>((set, get) => {
       const node = get().nodes.find((n) => n.id === id);
       // 3-layer cap: a node already at depth 2 (layer 3) can't own a sub-canvas.
       if (!node || node.is_block || nodeDepth(get().nodes, id) > 1) return;
+      get().pushUndo();
       const outId = await repo.makeBlock(node);
       const out: ArgNode = {
         id: outId,
@@ -368,6 +402,7 @@ export const useSpine = create<SpineState>((set, get) => {
       const { nodes, edges } = get();
       const node = nodes.find((n) => n.id === id);
       if (!node || !node.is_block) return;
+      get().pushUndo();
       // Keep the visible text: the collapsed block mirrors its output's claim.
       const keepClaim = blockOutput(id, nodes, edges)?.claim ?? node.claim;
       // Every node nested under this block, at any depth.
@@ -405,26 +440,34 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async setNodeClaim(id, claim) {
+      if (get().nodes.find((n) => n.id === id)?.claim === claim) return; // no-op blur
+      get().pushUndo();
       await repo.updateNodeClaim(id, claim);
       set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, claim } : n)) }));
     },
 
     async setNodeBody(id, body) {
+      if (get().nodes.find((n) => n.id === id)?.body === body) return; // no-op blur
+      get().pushUndo();
       await repo.updateNodeBody(id, body);
       set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, body } : n)) }));
     },
 
     async setNodeType(id, typeId) {
+      get().pushUndo();
       await repo.updateNodeType(id, typeId);
       set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, type_id: typeId } : n)) }));
     },
 
     async setNodeStrength(id, strength) {
+      if (get().nodes.find((n) => n.id === id)?.strength === strength) return;
+      get().pushUndo();
       await repo.updateNodeStrength(id, strength);
       set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, strength } : n)) }));
     },
 
     async setNodeAttention(id, attention) {
+      get().pushUndo();
       await repo.updateNodeAttention(id, attention);
       set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, attention } : n)) }));
     },
@@ -440,6 +483,7 @@ export const useSpine = create<SpineState>((set, get) => {
 
     async setNodePositions(updates) {
       if (!updates.length) return;
+      get().pushUndo();
       const m = new Map(updates.map((u) => [u.id, u]));
       set((s) => ({
         nodes: s.nodes.map((n) => {
@@ -451,6 +495,7 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async removeNode(id) {
+      get().pushUndo();
       await repo.deleteNode(id);
       set((s) => {
         const del = new Set<number>([id]);
@@ -470,6 +515,7 @@ export const useSpine = create<SpineState>((set, get) => {
     async addEdge(fromId, toId) {
       if (fromId === toId) return;
       if (get().edges.some((e) => e.from_id === fromId && e.to_id === toId)) return;
+      get().pushUndo();
       const id = await repo.createEdge(fromId, toId);
       set((s) => ({
         edges: [...s.edges, { id, from_id: fromId, to_id: toId, kind: "conjunctive" }],
@@ -477,11 +523,13 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async setEdgeKind(id, kind) {
+      get().pushUndo();
       await repo.updateEdgeKind(id, kind);
       set((s) => ({ edges: s.edges.map((e) => (e.id === id ? { ...e, kind } : e)) }));
     },
 
     async removeEdge(id) {
+      get().pushUndo();
       await repo.deleteEdge(id);
       set((s) => ({
         edges: s.edges.filter((e) => e.id !== id),
@@ -491,6 +539,7 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async removeSelected() {
+      get().pushUndo();
       const { selectedNodeIds, selectedEdgeIds, nodes } = get();
       for (const id of selectedEdgeIds) await repo.deleteEdge(id);
       for (const id of selectedNodeIds) await repo.deleteNode(id);
@@ -514,6 +563,7 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async addSupport(nodeId) {
+      get().pushUndo();
       const order = get().supports.filter((s) => s.node_id === nodeId).length;
       const id = await repo.createSupport(nodeId, "", null, order);
       set((s) => ({
@@ -525,11 +575,13 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async setSupportText(id, text) {
+      get().pushUndo();
       await repo.updateSupportText(id, text);
       set((s) => ({ supports: s.supports.map((x) => (x.id === id ? { ...x, text } : x)) }));
     },
 
     async setSupportSource(id, sourceId) {
+      get().pushUndo();
       await repo.updateSupportSource(id, sourceId);
       set((s) => ({
         supports: s.supports.map((x) => (x.id === id ? { ...x, source_id: sourceId } : x)),
@@ -537,16 +589,19 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async removeSupport(id) {
+      get().pushUndo();
       await repo.deleteSupport(id);
       set((s) => ({ supports: s.supports.filter((x) => x.id !== id) }));
     },
 
     async setSupportStance(id, stance) {
+      get().pushUndo();
       await repo.updateSupportStance(id, stance);
       set((s) => ({ supports: s.supports.map((x) => (x.id === id ? { ...x, stance } : x)) }));
     },
 
     async reorderSupports(_nodeId, orderedIds) {
+      get().pushUndo();
       await repo.setSupportOrder(orderedIds);
       const pos = new Map(orderedIds.map((id, i) => [id, i]));
       set((s) => ({
@@ -559,6 +614,7 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async importBibtex(text) {
+      get().pushUndo();
       const entries = parseBibtex(text);
       const existing = new Set(get().sources.map((s) => s.key));
       let created = 0;
@@ -594,6 +650,7 @@ export const useSpine = create<SpineState>((set, get) => {
     },
 
     async setLinearOrder(ids) {
+      get().pushUndo();
       set({ linearOrder: ids });
       await repo.replaceLinearOrder(ids);
     },

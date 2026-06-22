@@ -285,6 +285,7 @@ export function GraphCanvas() {
   // re-apply stale (unselected) nodes and clobber RF's instant selection, making
   // a click appear to do nothing until the next interaction.
   const onNodeDragStart = useCallback<OnNodeDrag>((_e, node, dragged) => {
+    useSpine.getState().pushUndo(); // one undo snapshot per drag gesture
     dragOrigins.current = new Map(
       dragged.map((n) => [Number(n.id), { x: n.position.x, y: n.position.y }]),
     );
