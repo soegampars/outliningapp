@@ -92,6 +92,14 @@ export async function updateNodeAttention(id: number, attention: number): Promis
   ]);
 }
 
+export async function updateNodeParent(id: number, parentId: number | null): Promise<void> {
+  const db = await conn();
+  await db.execute("UPDATE node SET parent_id = $1, updated_at = datetime('now') WHERE id = $2", [
+    parentId,
+    id,
+  ]);
+}
+
 export async function setNodePositions(
   updates: { id: number; x: number; y: number }[],
 ): Promise<void> {

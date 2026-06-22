@@ -16,6 +16,7 @@ export interface ArgNodeData {
   spineRole?: "spine" | "lateral" | null;
   positionRole?: "terminus" | "output" | "section" | null;
   parked?: boolean;
+  cut?: boolean;
   [key: string]: unknown;
 }
 
@@ -79,7 +80,8 @@ export function ArgNodeView({ id, data, selected }: NodeProps) {
     (d.spineRole === "lateral" ? " spine-node--lateral" : "") +
     (d.positionRole ? " spine-node--" + d.positionRole : "") +
     (d.parked ? " spine-node--parked" : "") +
-    (isFraming ? " spine-node--framing" : "");
+    (isFraming ? " spine-node--framing" : "") +
+    (d.cut ? " spine-node--cut" : "");
 
   return (
     <div className={cls}>

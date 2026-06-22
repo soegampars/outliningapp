@@ -45,6 +45,7 @@ interface SpineState {
   sourceById: Record<number, Source>;
   linearOrder: number[];
   undoStack: repo.ProjectData[]; // snapshots for multi-step undo (v3)
+  cutNodeIds: number[]; // nodes marked for move via cut/paste (v3)
   currentParentId: number | null; // which level the canvas shows (null = top, else a block)
   selectedNodeId: number | null;
   selectedEdgeId: number | null;
@@ -77,6 +78,8 @@ interface SpineState {
   drillInto: (id: number) => void;
   drillUp: () => void;
   drillTo: (parentId: number | null) => void;
+  cutSelection: () => void;
+  pasteInto: () => Promise<void>;
   setNodeClaim: (id: number, claim: string) => Promise<void>;
   setNodeBody: (id: number, body: string) => Promise<void>;
   setNodeType: (id: number, typeId: number) => Promise<void>;
@@ -141,6 +144,7 @@ export const useSpine = create<SpineState>((set, get) => {
     sourceById: {},
     linearOrder: [],
     undoStack: [],
+    cutNodeIds: [],
     currentParentId: null,
     selectedNodeId: null,
     selectedEdgeId: null,
@@ -396,6 +400,71 @@ export const useSpine = create<SpineState>((set, get) => {
 
     drillTo(parentId) {
       set({ currentParentId: parentId, ...CLEARED_SELECTION });
+    },
+
+    cutSelection() {
+      const ids = get().selectedNodeIds;
+      if (!ids.length) return;
+      set({ cutNodeIds: [...ids] });
+      flash(`Cut ${ids.length} box${ids.length > 1 ? "es" : ""} — drill in and press Ctrl+V to move`);
+    },
+
+    async pasteInto() {
+      const cut = get().cutNodeIds;
+      if (!cut.length) return;
+      const target = get().currentParentId;
+      const { nodes } = get();
+      const subtreeOf = (rootId: number) => {
+        const out = new Set<number>([rootId]);
+        const stack = [rootId];
+        while (stack.length) {
+          const p = stack.pop() as number;
+          for (const n of nodes) if (n.parent_id === p && !out.has(n.id)) {
+            out.add(n.id);
+            stack.push(n.id);
+          }
+        }
+        return out;
+      };
+      const targetDepth = target == null ? 0 : nodeDepth(nodes, target) + 1;
+      const valid: number[] = [];
+      for (const id of cut) {
+        const n = nodes.find((x) => x.id === id);
+        if (!n || (n.parent_id ?? null) === target) continue; // gone or already here
+        const sub = subtreeOf(id);
+        if (target != null && sub.has(target)) continue; // can't paste into itself/descendant
+        const rootDepth = nodeDepth(nodes, id);
+        let height = 0;
+        for (const sid of sub) height = Math.max(height, nodeDepth(nodes, sid) - rootDepth);
+        if (targetDepth + height > 2) continue; // 3-layer cap
+        valid.push(id);
+      }
+      if (!valid.length) {
+        set({ cutNodeIds: [] });
+        flash("Can't paste here — it would exceed 3 levels (or the target is inside what you cut).");
+        return;
+      }
+      get().pushUndo();
+      // Edges with exactly one endpoint in the moved set now cross levels — drop them.
+      const moved = new Set(valid);
+      const dropIds = get()
+        .edges.filter((e) => moved.has(e.from_id) !== moved.has(e.to_id))
+        .map((e) => e.id);
+      for (const eid of dropIds) await repo.deleteEdge(eid);
+      for (let i = 0; i < valid.length; i++) {
+        await repo.updateNodeParent(valid[i], target);
+        await repo.updateNodePosition(valid[i], 140 + i * 36, 120 + i * 36);
+      }
+      const dropSet = new Set(dropIds);
+      set((s) => ({
+        nodes: s.nodes.map((n) => {
+          const i = valid.indexOf(n.id);
+          return i >= 0 ? { ...n, parent_id: target, pos_x: 140 + i * 36, pos_y: 120 + i * 36 } : n;
+        }),
+        edges: s.edges.filter((e) => !dropSet.has(e.id)),
+        cutNodeIds: [],
+      }));
+      flash(`Moved ${valid.length} box${valid.length > 1 ? "es" : ""} here`);
     },
 
     async dissolveBlock(id) {

@@ -39,6 +39,7 @@ export function GraphCanvas() {
   const linearOrder = useSpine((s) => s.linearOrder);
   const selectedNodeIds = useSpine((s) => s.selectedNodeIds);
   const selectedEdgeIds = useSpine((s) => s.selectedEdgeIds);
+  const cutNodeIds = useSpine((s) => s.cutNodeIds);
   const focusedSourceId = useSpine((s) => s.focusedSourceId);
   const moveNodeLocal = useSpine((s) => s.moveNodeLocal);
   const persistNodePosition = useSpine((s) => s.persistNodePosition);
@@ -210,6 +211,7 @@ export function GraphCanvas() {
   }, [supports, focusedSourceId]);
 
   const selectedNodeSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
+  const cutSet = useMemo(() => new Set(cutNodeIds), [cutNodeIds]);
   const selectedEdgeSet = useMemo(() => new Set(selectedEdgeIds), [selectedEdgeIds]);
 
   const rfNodes = useMemo<RFNode[]>(
@@ -240,6 +242,7 @@ export function GraphCanvas() {
             spineRole: spine.has(n.id) ? "spine" : lateral.has(n.id) ? "lateral" : null,
             positionRole,
             parked: gapIds.has(n.type_id) && !connectedIds.has(n.id),
+            cut: cutSet.has(n.id),
           },
         };
       }),
@@ -258,6 +261,7 @@ export function GraphCanvas() {
       conclusionTypeIds,
       gapIds,
       connectedIds,
+      cutSet,
     ],
   );
 

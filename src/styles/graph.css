@@ -522,6 +522,13 @@
   color: var(--support-citation) !important;
 }
 
+/* A node marked for cut/move (v3) — dimmed with a dashed accent until pasted. */
+.spine-node--cut {
+  opacity: 0.5;
+  outline: 1px dashed var(--support-citation);
+  outline-offset: 2px;
+}
+
 /* Arrange toolbar (v3) — align / distribute / gather selected nodes. */
 .arrange-toolbar {
   position: absolute;

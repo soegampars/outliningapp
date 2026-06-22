@@ -54,6 +54,20 @@ export default function App() {
         void st.undo();
         return;
       }
+      if (mod && (e.key === "x" || e.key === "X")) {
+        if (st.view === "graph" && st.selectedNodeIds.length) {
+          e.preventDefault();
+          st.cutSelection();
+        }
+        return;
+      }
+      if (mod && (e.key === "v" || e.key === "V")) {
+        if (st.view === "graph" && st.cutNodeIds.length) {
+          e.preventDefault();
+          void st.pasteInto();
+        }
+        return;
+      }
       if (mod && (e.key === "d" || e.key === "D")) {
         if (st.view === "graph" && st.selectedNodeId != null) {
           e.preventDefault();
@@ -71,6 +85,7 @@ export default function App() {
       if (e.key === "Escape") {
         if (st.pendingFileAction) st.cancelFileAction();
         else if (st.editingNodeId != null) st.setEditing(null);
+        else if (st.cutNodeIds.length) useSpine.setState({ cutNodeIds: [] });
         else if (st.view === "graph" && st.currentParentId != null) st.drillUp();
         else st.setSelection([], []);
       }
