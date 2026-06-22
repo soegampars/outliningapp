@@ -11,6 +11,7 @@ import {
   type Node as RFNode,
   type NodeChange,
   type OnConnect,
+  type OnNodeDrag,
 } from "@xyflow/react";
 import { useSpine } from "../state/store";
 import { computeEffectiveStrength } from "../model/strength";
@@ -25,6 +26,8 @@ const nodeTypes = { arg: ArgNodeView };
 // React Flow's internal prop-sync churn.
 const PRO_OPTIONS = { hideAttribution: true };
 const PAN_ON_DRAG = [1, 2];
+// Shift / Ctrl / Cmd + click toggles a node in/out of the selection.
+const MULTI_SELECT_KEYS = ["Shift", "Meta", "Control"];
 
 export function GraphCanvas() {
   const nodes = useSpine((s) => s.nodes);
@@ -49,6 +52,26 @@ export function GraphCanvas() {
   // keep effect deps free of it (listing it warns + churns React Flow's fit queue).
   const fitViewRef = useRef(fitView);
   fitViewRef.current = fitView;
+
+  // Shift-drag locks a node's movement to one axis (precise alignment). Track the
+  // Shift key and each dragged node's origin so onNodesChange can pin an axis.
+  const shiftRef = useRef(false);
+  const dragOrigins = useRef<Map<number, { x: number; y: number }> | null>(null);
+  const dragPrimary = useRef<number | null>(null);
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftRef.current = true;
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftRef.current = false;
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
 
   // Re-centre when drilling between levels (the canvas doesn't remount, so a
   // fresh fit is needed). Poll until the DOM shows exactly this level's nodes,
@@ -260,15 +283,53 @@ export function GraphCanvas() {
   // onSelectionChange fires a frame late, so our controlled `selected` would
   // re-apply stale (unselected) nodes and clobber RF's instant selection, making
   // a click appear to do nothing until the next interaction.
+  const onNodeDragStart = useCallback<OnNodeDrag>((_e, node, dragged) => {
+    dragOrigins.current = new Map(
+      dragged.map((n) => [Number(n.id), { x: n.position.x, y: n.position.y }]),
+    );
+    dragPrimary.current = Number(node.id);
+  }, []);
+
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       const st = useSpine.getState();
       const sel = new Set(st.selectedNodeIds);
       let selChanged = false;
+
+      // Shift-drag axis-lock: pick the axis from the primary node's larger delta,
+      // then pin the other axis (to its origin) for every node in the drag.
+      const origins = dragOrigins.current;
+      let lock: "x" | "y" | null = null;
+      if (shiftRef.current && origins && origins.size) {
+        const prim =
+          changes.find(
+            (c) => c.type === "position" && c.position && Number(c.id) === dragPrimary.current,
+          ) ?? changes.find((c) => c.type === "position" && c.position);
+        if (prim && prim.type === "position" && prim.position) {
+          const o = origins.get(Number(prim.id));
+          if (o) {
+            lock = Math.abs(prim.position.x - o.x) >= Math.abs(prim.position.y - o.y) ? "y" : "x";
+          }
+        }
+      }
+
       for (const c of changes) {
         if (c.type === "position") {
-          if (c.position) moveNodeLocal(Number(c.id), c.position.x, c.position.y);
-          if (c.dragging === false) void persistNodePosition(Number(c.id));
+          if (c.position) {
+            let { x, y } = c.position;
+            if (lock && origins) {
+              const o = origins.get(Number(c.id));
+              if (o) {
+                if (lock === "y") y = o.y;
+                else x = o.x;
+              }
+            }
+            moveNodeLocal(Number(c.id), x, y);
+          }
+          if (c.dragging === false) {
+            void persistNodePosition(Number(c.id));
+            dragOrigins.current = null;
+          }
         } else if (c.type === "select") {
           selChanged = true;
           if (c.selected) sel.add(Number(c.id));
@@ -343,6 +404,7 @@ export function GraphCanvas() {
         edges={rfEdges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
+        onNodeDragStart={onNodeDragStart}
         onEdgesChange={onEdgesChange}
         onNodeDoubleClick={onNodeDoubleClick}
         onEdgeDoubleClick={onEdgeDoubleClick}
@@ -352,6 +414,7 @@ export function GraphCanvas() {
         zoomOnDoubleClick={false}
         deleteKeyCode={null}
         selectionOnDrag
+        multiSelectionKeyCode={MULTI_SELECT_KEYS}
         panOnDrag={PAN_ON_DRAG}
         panActivationKeyCode="Space"
         minZoom={0.2}
